@@ -112,8 +112,26 @@ Además del login tradicional con usuario/contraseña que trae Filament, `App\Mo
 
 - **Billetera Lightning (LNURL-auth)** — `web/app/Http/Controllers/Auth/StaffLnurlAuthController.php`, rutas `/staff-login` y `/staff-lnurl-auth/*`.
 - **WhatsApp (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffWhatsappAuthController.php`, rutas `/staff-login-whatsapp` y `/staff-whatsapp-auth/*`. El código se entrega vía el propio bot de WhatsApp, a través de un endpoint interno del bot (`whatsapp-bot/src/server/internalApi.ts`, `POST /send-message`, nunca publicado al host — solo alcanzable en la red interna de Docker como `http://whatsapp-bot:3001`) que `App\Services\Whatsapp\WhatsappBotClient` llama con un secreto compartido (`WHATSAPP_BOT_INTERNAL_TOKEN`, debe coincidir en `web/.env` y `whatsapp-bot/.env`).
+- **Telegram (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffTelegramAuthController.php`, ruta `/staff-login-telegram` (pedís el código con tu email de admin). A diferencia de WhatsApp, esto habla **directo** con la Bot API de Telegram vía HTTPS (`App\Services\Telegram\TelegramBotClient`) — no depende del bot de Node.js ni de que WhatsApp esté conectado. Usa el mismo `TELEGRAM_ADMIN_BOT_TOKEN` que ya configuraste para las alertas de salud (debe coincidir en `web/.env` y `whatsapp-bot/.env`).
 
-**Ninguna de las dos crea cuentas nuevas** (a diferencia del login de clientes): una billetera o número de WhatsApp solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular el primero, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** o **"Vincular WhatsApp 💬"** desde el menú de usuario del panel (arriba a la derecha) — ambas rutas reusan la misma vista para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
+**Ninguna de las tres crea cuentas nuevas** (a diferencia del login de clientes): una billetera, número de WhatsApp o chat de Telegram solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular billetera o WhatsApp, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** o **"Vincular WhatsApp 💬"** desde el menú de usuario del panel — ambas rutas reusan la misma vista para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
+
+**Vincular Telegram es distinto**, porque un bot de Telegram nunca puede mandarte el primer mensaje — tenés que escribirle vos primero:
+
+1. Iniciá sesión con usuario/contraseña y abrí **"Vincular Telegram 📨"** del menú de usuario. Te muestra un código (`/staff-link-telegram`, `TelegramLinkController`).
+2. Le mandás ese código al bot de Telegram como mensaje: `/vincular CODIGO`.
+3. `web/app/Http/Controllers/TelegramWebhookController.php` recibe ese mensaje (Telegram lo empuja vía webhook a `POST /api/telegram/webhook`, autenticado con el header `X-Telegram-Bot-Api-Secret-Token`), asocia tu `chat_id` a tu cuenta y te confirma por Telegram.
+4. La página, que estaba haciendo polling, detecta la confirmación y te redirige al panel.
+
+**Configurar el webhook de Telegram (una sola vez, en el VPS):**
+
+```bash
+curl -s "https://api.telegram.org/bot<TELEGRAM_ADMIN_BOT_TOKEN>/setWebhook" \
+  -d "url=https://pirapire.pro/api/telegram/webhook" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+Reemplazá `<TELEGRAM_ADMIN_BOT_TOKEN>` y `<TELEGRAM_WEBHOOK_SECRET>` (sin los `<>`) por los mismos valores que están en `web/.env`.
 
 El dashboard del panel (`web/app/Filament/Widgets/`) suma:
 
@@ -214,6 +232,7 @@ Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`: bot y chat de Telegram para las alertas de salud/QR de la sesión de WhatsApp (opcional).
 - `WHATSAPP_BOT_INTERNAL_TOKEN` / `WHATSAPP_BOT_INTERNAL_PORT`: secreto y puerto del endpoint interno con el que Laravel le pide al bot que mande un mensaje de WhatsApp (login admin por código). Debe ser el **mismo token** en `web/.env` (`WHATSAPP_BOT_INTERNAL_TOKEN`) y en `whatsapp-bot/.env`.
+- `TELEGRAM_ADMIN_BOT_TOKEN` (en `web/.env`, además de en `whatsapp-bot/.env` — mismo valor): usado por `TelegramBotClient` para mandar códigos de login directo por HTTPS. `TELEGRAM_WEBHOOK_SECRET`: valida que las actualizaciones a `POST /api/telegram/webhook` vengan realmente de Telegram (ver sección 6, "Configurar el webhook de Telegram").
 
 ## CI/CD
 

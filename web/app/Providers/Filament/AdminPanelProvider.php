@@ -55,6 +55,10 @@ class AdminPanelProvider extends PanelProvider
                     ->label('Vincular WhatsApp 💬')
                     ->url('/staff-login-whatsapp')
                     ->icon('heroicon-o-chat-bubble-left-right'),
+                MenuItem::make()
+                    ->label('Vincular Telegram 📨')
+                    ->url('/staff-link-telegram')
+                    ->icon('heroicon-o-paper-airplane'),
             ])
             ->middleware([
                 EncryptCookies::class,

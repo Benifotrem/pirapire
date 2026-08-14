@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Auth\LnurlAuthController;
 use App\Http\Controllers\Auth\StaffLnurlAuthController;
+use App\Http\Controllers\Auth\StaffTelegramAuthController;
 use App\Http\Controllers\Auth\StaffWhatsappAuthController;
+use App\Http\Controllers\Auth\TelegramLinkController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
@@ -52,3 +54,23 @@ Route::get('/staff-whatsapp-auth/verify', [StaffWhatsappAuthController::class, '
 Route::post('/staff-whatsapp-auth/verify', [StaffWhatsappAuthController::class, 'verify'])
     ->middleware('throttle:10,1')
     ->name('staff-whatsapp-auth.verify');
+
+// Telegram login for the Filament admin panel. Linking (learning the admin's
+// chat_id) requires an authenticated session because Telegram bots can't
+// message a chat first — see App\Http\Controllers\Auth\TelegramLinkController
+// and App\Http\Controllers\TelegramWebhookController. Login itself
+// (StaffTelegramAuthController) only needs the linked chat_id, already on
+// the User row, so it stays a guest route like the other two.
+Route::middleware('auth:web')->group(function () {
+    Route::get('/staff-link-telegram', [TelegramLinkController::class, 'show'])->name('staff-link-telegram');
+    Route::get('/staff-link-telegram/status/{code}', [TelegramLinkController::class, 'status'])->name('staff-telegram-link.status');
+});
+
+Route::get('/staff-login-telegram', [StaffTelegramAuthController::class, 'showRequest'])->name('staff-login-telegram');
+Route::post('/staff-telegram-auth/request', [StaffTelegramAuthController::class, 'request'])
+    ->middleware('throttle:5,1')
+    ->name('staff-telegram-auth.request');
+Route::get('/staff-telegram-auth/verify', [StaffTelegramAuthController::class, 'showVerify'])->name('staff-telegram-auth.verify-form');
+Route::post('/staff-telegram-auth/verify', [StaffTelegramAuthController::class, 'verify'])
+    ->middleware('throttle:10,1')
+    ->name('staff-telegram-auth.verify');

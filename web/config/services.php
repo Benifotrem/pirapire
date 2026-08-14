@@ -73,4 +73,21 @@ return [
         'fee_percent' => env('ESCROW_FEE_PERCENT', 1.5),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Telegram (admin panel login)
+    |--------------------------------------------------------------------------
+    |
+    | Same bot as whatsapp-bot's health-check notifier (TELEGRAM_ADMIN_BOT_TOKEN
+    | must be the same token in both .env files), used here to deliver admin
+    | login codes directly over the Bot API — no dependency on the Node bot
+    | or WhatsApp being up. See App\Services\Telegram\TelegramBotClient and
+    | App\Http\Controllers\TelegramWebhookController.
+    |
+    */
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_ADMIN_BOT_TOKEN'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+    ],
+
 ];
