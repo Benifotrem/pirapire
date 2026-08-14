@@ -1,0 +1,50 @@
+### Root ###
+.DS_Store
+.idea/
+.vscode/
+*.log
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+### Laravel (web/) ###
+web/vendor/
+web/node_modules/
+web/public/hot
+web/public/storage
+web/public/build
+web/storage/*.key
+web/storage/app/*
+!web/storage/app/.gitignore
+!web/storage/app/public/.gitignore
+web/storage/framework/cache/*
+!web/storage/framework/cache/.gitignore
+web/storage/framework/sessions/*
+!web/storage/framework/sessions/.gitignore
+web/storage/framework/testing/*
+!web/storage/framework/testing/.gitignore
+web/storage/framework/views/*
+!web/storage/framework/views/.gitignore
+web/storage/logs/*
+!web/storage/logs/.gitignore
+web/bootstrap/cache/*
+!web/bootstrap/cache/.gitignore
+web/.phpunit.cache
+web/.phpunit.result.cache
+
+### Node / WhatsApp bot ###
+whatsapp-bot/node_modules/
+whatsapp-bot/dist/
+whatsapp-bot/.env
+whatsapp-bot/auth_sessions/
+whatsapp-bot/*.log
+whatsapp-bot/coverage/
+
+### Docker ###
+docker/volumes/
+*.pid
+
+### Misc ###
+*.swp
+*.bak

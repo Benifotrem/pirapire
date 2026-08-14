@@ -1,0 +1,36 @@
+name: Deploy to VPS
+
+# Manually triggered (or on release) so a deploy is never a side effect of
+# an ordinary push. Requires these repository secrets to be configured:
+#   DEPLOY_HOST      - 179.198.98.224
+#   DEPLOY_USER      - SSH user with access to /opt/pirapire on the VPS
+#   DEPLOY_SSH_KEY   - private key for DEPLOY_USER
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/pirapire
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose pull --ignore-pull-failures
+            docker compose build
+            docker compose run --rm web php artisan migrate --force
+            docker compose up -d
+            docker compose exec -T web php artisan config:cache
+            docker compose exec -T web php artisan route:cache
+            docker compose exec -T web php artisan view:cache
