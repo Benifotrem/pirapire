@@ -13,7 +13,7 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().default('redis://redis:6379'),
 
   // Pirapire API (Laravel backend)
-  PIRAPIRE_API_BASE_URL: z.string().url().default('http://web:8000/api'),
+  PIRAPIRE_API_BASE_URL: z.string().url().default('http://nginx/api'),
   PIRAPIRE_API_TOKEN: z.string().min(1, 'PIRAPIRE_API_TOKEN is required'),
 
   // RoboSats
