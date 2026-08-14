@@ -21,16 +21,27 @@ class LnbitsClient
 {
     private readonly string $baseUrl;
 
+    private readonly ?string $adminKey;
+
+    private readonly ?string $invoiceReadKey;
+
+    private readonly ?string $extensionPath;
+
     public function __construct(
         ?string $baseUrl = null,
-        private readonly ?string $adminKey = null,
-        private readonly ?string $invoiceReadKey = null,
-        private readonly ?string $extensionPath = null,
+        ?string $adminKey = null,
+        ?string $invoiceReadKey = null,
+        ?string $extensionPath = null,
     ) {
+        // Readonly properties can only be assigned once — constructor
+        // promotion (`private readonly ?string $adminKey = null`) would
+        // already consume that single assignment, so a later `??=` to
+        // fall back to config() throws "Cannot modify readonly property".
+        // Plain parameters + one explicit assignment each avoids that.
         $this->baseUrl = rtrim($baseUrl ?? config('services.lnbits.base_url'), '/');
-        $this->adminKey ??= config('services.lnbits.admin_key');
-        $this->invoiceReadKey ??= config('services.lnbits.invoice_read_key');
-        $this->extensionPath ??= config('services.lnbits.hold_extension_path');
+        $this->adminKey = $adminKey ?? config('services.lnbits.admin_key');
+        $this->invoiceReadKey = $invoiceReadKey ?? config('services.lnbits.invoice_read_key');
+        $this->extensionPath = $extensionPath ?? config('services.lnbits.hold_extension_path');
     }
 
     private function url(string $path): string
