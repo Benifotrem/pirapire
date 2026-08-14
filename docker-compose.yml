@@ -14,6 +14,7 @@ services:
       #   cd web && npm install && npm run build
       - ./web/public:/var/www/html/public:ro
       - ./docker/nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/php-fpm.conf:/etc/nginx/php-fpm.conf:ro
       # Cloudflare Origin Certificate (Full Strict mode) — generated in the
       # Cloudflare dashboard, never committed. See README "HTTPS con
       # Cloudflare" for how to create it.

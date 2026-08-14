@@ -13,11 +13,17 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().default('redis://redis:6379'),
 
   // Pirapire API (Laravel backend)
-  PIRAPIRE_API_BASE_URL: z.string().url().default('http://nginx/api'),
+  PIRAPIRE_API_BASE_URL: z.string().url().default('http://nginx:8080/api'),
   PIRAPIRE_API_TOKEN: z.string().min(1, 'PIRAPIRE_API_TOKEN is required'),
 
-  // RoboSats
-  ROBOSATS_API_BASE_URL: z.string().url().default('https://api.robosats.com/api'),
+  // RoboSats. No default: RoboSats is a federated, Tor-first exchange
+  // with no single stable clearnet API (the project's own docs discourage
+  // clearnet access, and known Tor2Web gateways have gone down before).
+  // Point this at a coordinator you trust — self-hosted, or reached
+  // through a local Tor SOCKS proxy — see README "Alertas P2P de
+  // RoboSats". Left unset, the poller logs a warning once and stays off;
+  // the rest of the bot (!mempool/!vip/!escrow) is unaffected.
+  ROBOSATS_API_BASE_URL: z.string().url().optional(),
   ROBOSATS_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   ROBOSATS_COORDINATOR: z.string().default('robosats-main'),
 

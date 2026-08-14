@@ -57,6 +57,8 @@ Sin correo, sin contraseña, sin base de datos de credenciales que filtrar.
 
 Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, métodos de pago) desde el dashboard web tras autenticarse con LNURL-auth.
 
+**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, el poller queda desactivado (loggea un aviso una vez y no reintenta en loop) sin afectar `!mempool`/`!vip`/`!escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza — lo más fiel al diseño de RoboSats es correrlo contra el `.onion` de un coordinador a través de un proxy Tor SOCKS local (no incluido en este repo todavía).
+
 ## 3. Escrow Lightning para empleos (hold invoices)
 
 `web/app/Services/Escrow/EscrowService.php` implementa una máquina de estados sobre hold invoices de LNbits (`web/app/Services/Lightning/LnbitsClient.php`):

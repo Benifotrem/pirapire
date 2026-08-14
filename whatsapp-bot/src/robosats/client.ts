@@ -30,13 +30,17 @@ const CURRENCY_CODES: Record<string, number> = {
 };
 
 export class RoboSatsClient {
-  constructor(private readonly baseUrl: string = env.ROBOSATS_API_BASE_URL) {}
+  constructor(private readonly baseUrl: string | undefined = env.ROBOSATS_API_BASE_URL) {}
 
   /**
    * Fetches the public order book, optionally filtered by currency (PYG/USD).
    * RoboSats coordinators expose GET /api/book/?currency=<iso>&type=<0|1>
    */
   async fetchBook(currency: 'PYG' | 'USD' = 'PYG'): Promise<RoboSatsOrder[]> {
+    if (!this.baseUrl) {
+      return [];
+    }
+
     const isoCode = CURRENCY_CODES[currency];
     const url = `${this.baseUrl}/book/?currency=${isoCode}`;
 

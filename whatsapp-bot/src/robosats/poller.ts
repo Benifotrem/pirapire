@@ -22,6 +22,14 @@ export class RoboSatsPoller {
   constructor(private readonly sendFn: SendMessageFn) {}
 
   start(): void {
+    if (!env.ROBOSATS_API_BASE_URL) {
+      logger.warn(
+        'ROBOSATS_API_BASE_URL not set — P2P alert polling is disabled. ' +
+          '!mempool/!vip/!escrow are unaffected. See README "Alertas P2P de RoboSats".',
+      );
+      return;
+    }
+
     const intervalSeconds = env.ROBOSATS_POLL_INTERVAL_SECONDS;
     const cronExpression = `*/${intervalSeconds} * * * * *`;
 
