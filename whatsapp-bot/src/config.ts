@@ -51,6 +51,13 @@ const EnvSchema = z.object({
   // can't require min(1) the way a truly mandatory field would).
   TELEGRAM_ADMIN_BOT_TOKEN: z.string().optional(),
   TELEGRAM_ADMIN_CHAT_ID: z.string().optional(),
+
+  // Internal-only HTTP server (never published to the host — reached at
+  // http://whatsapp-bot:<port> over the Docker network) that lets Laravel
+  // ask the bot to deliver a WhatsApp message, e.g. an admin login code.
+  // See src/server/internalApi.ts.
+  WHATSAPP_BOT_INTERNAL_PORT: z.coerce.number().int().positive().default(3001),
+  WHATSAPP_BOT_INTERNAL_TOKEN: z.string().min(1, 'WHATSAPP_BOT_INTERNAL_TOKEN is required'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

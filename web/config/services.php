@@ -63,6 +63,10 @@ return [
     */
     'whatsapp_bot' => [
         'api_token' => env('WHATSAPP_BOT_API_TOKEN'),
+        // Reverse direction: Laravel -> bot, used to deliver admin login
+        // codes over WhatsApp. See App\Services\Whatsapp\WhatsappBotClient.
+        'internal_url' => env('WHATSAPP_BOT_INTERNAL_URL', 'http://whatsapp-bot:3001'),
+        'internal_token' => env('WHATSAPP_BOT_INTERNAL_TOKEN'),
     ],
 
     'escrow' => [

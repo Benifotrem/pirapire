@@ -88,9 +88,9 @@ created → cancelled (expira sin fondear)
 |---|---|
 | `!mempool` | Altura de bloque actual y tarifas recomendadas (mempool.space). |
 | `!vip` | Estado de suscripción VIP del número que escribe. |
-| `!escrow create <monto_sats> <descripción>` | Crea un trabajo de escrow con hold invoice. |
+| `!escrow create <monto_sats> <descripción>` | Crea un trabajo de escrow (factura de fondeo vía LNbits). |
 | `!escrow status <id>` | Consulta el estado de un trabajo. |
-| `!escrow release <id>` | Libera los fondos al freelancer. |
+| `!escrow release <id> <bolt11>` | Libera los fondos, pagando la factura bolt11 que provee el freelancer. |
 | `!escrow dispute <id>` | Abre una disputa para revisión de un admin. |
 | `!help` | Lista de comandos disponibles. |
 
@@ -106,7 +106,21 @@ Se engancha al listener `connection.update` de Baileys (`whatsapp-bot/src/bailey
 - **Nuevo código QR emitido**: se renderiza como imagen PNG (`qrcode`) y se envía directamente como foto al chat, para volver a vincular la sesión sin acceso a la terminal del VPS.
 - **Reconexión exitosa** tras una caída: mensaje `✅ WhatsApp connection restored successfully!`.
 
-## 6. Frontend
+## 6. Panel de administración: login con billetera o WhatsApp, wallet y métricas
+
+Además del login tradicional con usuario/contraseña que trae Filament, `App\Models\User` (staff) puede iniciar sesión de dos formas passwordless, reusando la infraestructura ya construida para los clientes:
+
+- **Billetera Lightning (LNURL-auth)** — `web/app/Http/Controllers/Auth/StaffLnurlAuthController.php`, rutas `/staff-login` y `/staff-lnurl-auth/*`.
+- **WhatsApp (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffWhatsappAuthController.php`, rutas `/staff-login-whatsapp` y `/staff-whatsapp-auth/*`. El código se entrega vía el propio bot de WhatsApp, a través de un endpoint interno del bot (`whatsapp-bot/src/server/internalApi.ts`, `POST /send-message`, nunca publicado al host — solo alcanzable en la red interna de Docker como `http://whatsapp-bot:3001`) que `App\Services\Whatsapp\WhatsappBotClient` llama con un secreto compartido (`WHATSAPP_BOT_INTERNAL_TOKEN`, debe coincidir en `web/.env` y `whatsapp-bot/.env`).
+
+**Ninguna de las dos crea cuentas nuevas** (a diferencia del login de clientes): una billetera o número de WhatsApp solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular el primero, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** o **"Vincular WhatsApp 💬"** desde el menú de usuario del panel (arriba a la derecha) — ambas rutas reusan la misma vista para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
+
+El dashboard del panel (`web/app/Filament/Widgets/`) suma:
+
+- **`LnbitsWalletWidget`**: saldo en vivo del wallet LNbits de la plataforma (`LnbitsClient::getWalletDetails()`, key de solo lectura — la admin key nunca se usa acá), cacheado 30s. Visible solo para rol `admin` (no `support`).
+- **`PlatformStatsWidget`**: sats cobrados en comisión, volumen de escrow, escrows activos, disputas abiertas, VIPs activos y clientes registrados — todo calculado desde la base de datos propia, sin llamadas externas, visible para `admin` y `support`.
+
+## 7. Frontend
 
 `pirapire.pro` usa Tailwind CSS (ya configurado con Vite) con una estética inspirada en RoboSats: fondos claros (`bg-white` / `bg-slate-50`), acentos en azul eléctrico (`bg-blue-600`) y gradientes azul→púrpura (`from-blue-600 via-indigo-600 to-purple-600`) en tarjetas/banners, y fuente monoespaciada (`font-mono`) para montos en sats, el texto del LNURL y los códigos de contrato de escrow (`#ESC-XXXXXXXX`, ver `EscrowJob::contractCode()`).
 
@@ -199,6 +213,7 @@ Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
 - `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`: bot y chat de Telegram para las alertas de salud/QR de la sesión de WhatsApp (opcional).
+- `WHATSAPP_BOT_INTERNAL_TOKEN` / `WHATSAPP_BOT_INTERNAL_PORT`: secreto y puerto del endpoint interno con el que Laravel le pide al bot que mande un mensaje de WhatsApp (login admin por código). Debe ser el **mismo token** en `web/.env` (`WHATSAPP_BOT_INTERNAL_TOKEN`) y en `whatsapp-bot/.env`.
 
 ## CI/CD
 

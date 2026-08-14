@@ -41,9 +41,9 @@ class LnurlAuthService
         return ['session_id' => $sessionId, 'k1' => $k1];
     }
 
-    public function buildLnurl(string $k1): string
+    public function buildLnurl(string $k1, string $callbackRouteName = 'lnurl-auth.callback'): string
     {
-        $callbackUrl = route('lnurl-auth.callback', ['tag' => 'login', 'k1' => $k1]);
+        $callbackUrl = route($callbackRouteName, ['tag' => 'login', 'k1' => $k1]);
 
         return strtoupper(Bech32::encodeFromBytes('lnurl', $callbackUrl));
     }

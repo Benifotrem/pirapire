@@ -2,16 +2,17 @@ import { connectWhatsApp, sendWhatsAppMessage } from './baileys/connection.js';
 import { routeCommand } from './commands/index.js';
 import { RoboSatsPoller } from './robosats/poller.js';
 import { startAlertWorker } from './queue/alertQueue.js';
+import { startInternalApiServer } from './server/internalApi.js';
 import { logger } from './utils/logger.js';
 import type { WASocket } from '@whiskeysockets/baileys';
+import type { Server } from 'node:http';
 
 async function main() {
   const state: { socket?: WASocket } = {};
 
   const send = async (to: string, message: string) => {
     if (!state.socket) {
-      logger.warn({ to }, 'Tried to send a message before WhatsApp socket was ready');
-      return;
+      throw new Error('WhatsApp socket is not ready yet');
     }
     await sendWhatsAppMessage(state.socket, to, message);
   };
@@ -28,10 +29,13 @@ async function main() {
 
   const worker = startAlertWorker(send);
 
+  const internalApiServer: Server = startInternalApiServer(send);
+
   const shutdown = async () => {
     logger.info('Shutting down bot...');
     poller.stop();
     await worker.close();
+    internalApiServer.close();
     process.exit(0);
   };
 

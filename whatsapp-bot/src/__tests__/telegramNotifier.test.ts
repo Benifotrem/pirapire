@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 process.env.PIRAPIRE_API_TOKEN = 'test-token';
 process.env.TELEGRAM_ADMIN_BOT_TOKEN = 'bot-token-123';
 process.env.TELEGRAM_ADMIN_CHAT_ID = 'chat-456';
+process.env.WHATSAPP_BOT_INTERNAL_TOKEN = 'test-internal-token';
 
 const { TelegramNotifier } = await import('../telegram/telegramNotifier.js');
 

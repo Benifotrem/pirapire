@@ -57,4 +57,22 @@ class LnbitsClientTest extends TestCase
                 && $request['bolt11'] === 'lnbc1payoutinvoice';
         });
     }
+
+    public function test_get_wallet_details_uses_the_read_only_invoice_key(): void
+    {
+        Http::fake([
+            'lnbits.test/api/v1/wallet' => Http::response(['id' => 'w1', 'name' => 'Pirapire', 'balance' => 150000], 200),
+        ]);
+
+        $client = new LnbitsClient('http://lnbits.test', 'admin-key', 'invoice-key');
+        $result = $client->getWalletDetails();
+
+        $this->assertSame(150000, $result['balance']);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'http://lnbits.test/api/v1/wallet'
+                && $request->method() === 'GET'
+                && $request->hasHeader('X-Api-Key', 'invoice-key');
+        });
+    }
 }

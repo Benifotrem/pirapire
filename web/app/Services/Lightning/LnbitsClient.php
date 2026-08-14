@@ -49,6 +49,24 @@ class LnbitsClient
     }
 
     /**
+     * Fetches the platform wallet's balance/details. Uses the invoice/read
+     * key — a read-only credential — since displaying a balance never needs
+     * spend permission. Response includes 'balance' in millisatoshis.
+     */
+    public function getWalletDetails(): array
+    {
+        $response = Http::withHeaders(['X-Api-Key' => $this->invoiceReadKey])
+            ->get($this->url('/wallet'));
+
+        if ($response->failed()) {
+            Log::error('LNbits getWalletDetails failed', ['body' => $response->body()]);
+            throw new RuntimeException('Failed to fetch wallet details from LNbits.');
+        }
+
+        return $response->json();
+    }
+
+    /**
      * Creates a regular incoming invoice (funding invoice) for the given
      * amount. Uses the invoice/read key, since creating an invoice only
      * needs receive permission, not spend permission.
