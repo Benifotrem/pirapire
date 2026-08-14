@@ -43,6 +43,8 @@ whatsapp-bot/coverage/
 
 ### Docker ###
 docker/volumes/
+docker/nginx/certs/*
+!docker/nginx/certs/.gitkeep
 *.pid
 
 ### Misc ###

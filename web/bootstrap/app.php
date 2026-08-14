@@ -4,6 +4,7 @@ use App\Http\Middleware\VerifyWhatsappBotToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,6 +17,18 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'whatsapp-bot' => VerifyWhatsappBotToken::class,
         ]);
+
+        // nginx (the `web` container's only client) sits behind Cloudflare;
+        // trust it as the immediate proxy so Laravel reads the real client
+        // IP/scheme from Cloudflare's X-Forwarded-* headers instead of
+        // reporting every request as coming from the nginx container.
+        $middleware->trustProxies(
+            at: '*',
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

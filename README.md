@@ -201,6 +201,31 @@ Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
 - `.github/workflows/whatsapp-bot-ci.yml`: ESLint, `tsc --noEmit`, build, `vitest`.
 - `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push. También requiere que los tres `.env` (raíz, `web/`, `whatsapp-bot/`, ver tabla arriba) ya existan en `/opt/pirapire` en el VPS **antes** del primer deploy — como están en `.gitignore`, `git reset --hard` nunca los toca, pero tampoco los crea; si falta alguno el workflow corta antes de construir las imágenes y te dice cuál.
 
+## HTTPS con Cloudflare (Full Strict)
+
+`pirapire.pro` está pensado para correr detrás de Cloudflare en modo **Full (strict)**: Cloudflare atiende HTTPS a los visitantes y vuelve a cifrar el tramo hacia el VPS, y nginx valida ese tramo con un **Origin Certificate** propio de Cloudflare. Es obligatorio para esta app — el login LNURL-auth genera URLs `lightning:LNURL1...` que las billeteras solo aceptan sobre HTTPS real.
+
+**1. Generar el Origin Certificate** (una sola vez, en el dashboard de Cloudflare):
+
+1. `SSL/TLS` → `Origin Server` → **Create Certificate**.
+2. Dejá las opciones por defecto (RSA, 15 años) y agregá `pirapire.pro` y `*.pirapire.pro` como hostnames.
+3. Cloudflare te muestra un certificado y una clave privada — **no se pueden volver a ver después**, guardalos ahora.
+
+**2. Instalarlo en el VPS** (nunca se commitea al repo — quedan en `.gitignore`):
+
+```bash
+mkdir -p /opt/pirapire/docker/nginx/certs
+nano /opt/pirapire/docker/nginx/certs/cloudflare-origin.pem   # pegar el certificado
+nano /opt/pirapire/docker/nginx/certs/cloudflare-origin.key   # pegar la clave privada
+chmod 600 /opt/pirapire/docker/nginx/certs/cloudflare-origin.key
+```
+
+**3. Activar el modo en Cloudflare**: `SSL/TLS` → `Overview` → elegir **Full (strict)**. (Con "Flexible" o "Full" sin *strict*, nginx no tiene todavía un certificado público válido y Cloudflare rechazaría la conexión al origen.)
+
+**4. Redesplegar** — el próximo `docker compose up -d` (manual o vía `deploy.yml`) ya deja nginx escuchando en `80` (redirige a `443`) y `443` con ese certificado.
+
+Endurecimiento opcional recomendado más adelante: **Authenticated Origin Pulls** (`SSL/TLS` → `Origin Server`), que hace que nginx solo acepte conexiones que traigan el certificado cliente de Cloudflare — así nadie puede pegarle a la IP del VPS saltándose Cloudflare, ni aunque conozca la IP.
+
 ## Licencia
 
 MIT — ver [`LICENSE`](./LICENSE).
