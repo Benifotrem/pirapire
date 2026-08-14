@@ -30,6 +30,29 @@ jobs:
             git fetch origin claude/pirapire-bitcoin-lightning-main
             git reset --hard origin/claude/pirapire-bitcoin-lightning-main
 
+            # Fail fast, before the ~1min Docker build, if any of the three
+            # required .env files are missing. They're gitignored on
+            # purpose (secrets) so `git reset --hard` never touches them —
+            # if one's missing it's because it was never created on this
+            # VPS, not because the deploy wiped it out.
+            env_ok=1
+            if [ ! -f .env ]; then
+              echo "Missing .env (repo root) — docker-compose needs it for \${DB_PASSWORD} etc. Copy from .env.example and fill in secrets."
+              env_ok=0
+            fi
+            if [ ! -f web/.env ]; then
+              echo "Missing web/.env — the Laravel app config. Copy from web/.env.example and fill in secrets."
+              env_ok=0
+            fi
+            if [ ! -f whatsapp-bot/.env ]; then
+              echo "Missing whatsapp-bot/.env — the WhatsApp bot config. Copy from whatsapp-bot/.env.example and fill in secrets."
+              env_ok=0
+            fi
+            if [ "$env_ok" -eq 0 ]; then
+              echo "Create the missing file(s) above under /opt/pirapire on this VPS, then re-run this workflow."
+              exit 1
+            fi
+
             # nginx serves web/public straight off the host (see
             # docker-compose.yml), so the Vite build has to happen here too,
             # not just inside the web image. Uses a throwaway Node

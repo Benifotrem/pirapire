@@ -159,11 +159,22 @@ npm run dev             # escanea el QR que imprime en consola para vincular Wha
 O con Docker Compose (recomendado para un entorno completo, incluyendo Postgres, Redis y una instancia de LNbits local con `FakeWallet` para pruebas):
 
 ```bash
+cp .env.example .env                       # variables que usa docker-compose.yml (DB_PASSWORD, etc.)
 cp web/.env.example web/.env
 cp whatsapp-bot/.env.example whatsapp-bot/.env
 (cd web && npm install && npm run build)   # nginx serves public/ straight off the host
 docker compose up --build
 ```
+
+Son **tres** archivos `.env` distintos, cada uno con un rol distinto — ninguno sustituye a los otros:
+
+| Archivo | Para qué |
+|---|---|
+| `.env` (raíz) | Lo lee `docker compose` para las sustituciones `${VAR}` de `docker-compose.yml` (arranque del contenedor de Postgres, backend de LNbits). |
+| `web/.env` | Configuración de la app Laravel, inyectada al contenedor vía `env_file:`. |
+| `whatsapp-bot/.env` | Configuración del bot de WhatsApp. |
+
+`DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` tienen que ser **iguales** en `.env` (raíz) y en `web/.env`: el primero crea las credenciales del contenedor de Postgres, el segundo es lo que usa Laravel para conectarse a esa misma base.
 
 `FakeWallet` no mueve sats reales — antes de producción, configurá `LNBITS_BACKEND_WALLET_CLASS` apuntando a tu propio nodo Lightning (LND/CLN) y habilitá la extensión **Hold Invoice** desde la UI de administración de LNbits.
 
@@ -188,7 +199,7 @@ Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
 
 - `.github/workflows/laravel-ci.yml`: Pint (estilo), migraciones sobre SQLite, `php artisan test`.
 - `.github/workflows/whatsapp-bot-ci.yml`: ESLint, `tsc --noEmit`, build, `vitest`.
-- `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push.
+- `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push. También requiere que los tres `.env` (raíz, `web/`, `whatsapp-bot/`, ver tabla arriba) ya existan en `/opt/pirapire` en el VPS **antes** del primer deploy — como están en `.gitignore`, `git reset --hard` nunca los toca, pero tampoco los crea; si falta alguno el workflow corta antes de construir las imágenes y te dice cuál.
 
 ## Licencia
 
