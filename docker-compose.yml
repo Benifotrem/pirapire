@@ -96,7 +96,14 @@ services:
     restart: unless-stopped
     environment:
       LNBITS_BACKEND_WALLET_CLASS: ${LNBITS_BACKEND_WALLET_CLASS:-FakeWallet}
-      LNBITS_DATABASE_URL: sqlite:///data/database.sqlite3
+      # No LNBITS_DATABASE_URL: that's specifically for a Postgres
+      # connection string (e.g. postgres://...) — setting it at all,
+      # even to a sqlite-looking value, pushes LNbits' migration code
+      # down the Postgres path (it ran an information_schema.tables
+      # query against a SQLite connection and crashed on startup).
+      # Leaving it unset makes LNbits default to SQLite under
+      # LNBITS_DATA_FOLDER (default /app/data, matching the volume
+      # mount below) with no further config needed.
     volumes:
       - lnbits_data:/app/data
     ports:
