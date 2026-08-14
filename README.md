@@ -138,6 +138,8 @@ El dashboard del panel (`web/app/Filament/Widgets/`) suma:
 - **`LnbitsWalletWidget`**: saldo en vivo del wallet LNbits de la plataforma (`LnbitsClient::getWalletDetails()`, key de solo lectura — la admin key nunca se usa acá), cacheado 30s. Visible solo para rol `admin` (no `support`).
 - **`PlatformStatsWidget`**: sats cobrados en comisión, volumen de escrow, escrows activos, disputas abiertas, VIPs activos y clientes registrados — todo calculado desde la base de datos propia, sin llamadas externas, visible para `admin` y `support`.
 
+Además hay una página dedicada, **`App\Filament\Pages\WhatsappConnection`** (ítem "WhatsApp" en el menú, solo rol `admin`), que muestra el QR de vinculación o el estado de conexión en vivo, actualizándose sola cada 5s (`wire:poll`) — así podés re-vincular WhatsApp desde el navegador sin necesitar SSH ni depender de que Telegram esté funcionando. El bot empuja su estado (`qr`/`connected`/`disconnected`) a `POST /api/whatsapp/status` en cada evento `connection.update` de Baileys (`whatsapp-bot/src/baileys/connection.ts`), autenticado con el mismo `WHATSAPP_BOT_API_TOKEN` que usa para el resto de `routes/api.php`; Laravel lo cachea (`Cache::forever`) y la página lo lee.
+
 ## 7. Frontend
 
 `pirapire.pro` usa Tailwind CSS (ya configurado con Vite) con una estética inspirada en RoboSats: fondos claros (`bg-white` / `bg-slate-50`), acentos en azul eléctrico (`bg-blue-600`) y gradientes azul→púrpura (`from-blue-600 via-indigo-600 to-purple-600`) en tarjetas/banners, y fuente monoespaciada (`font-mono`) para montos en sats, el texto del LNURL y los códigos de contrato de escrow (`#ESC-XXXXXXXX`, ver `EscrowJob::contractCode()`).

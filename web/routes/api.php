@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AlertsApiController;
 use App\Http\Controllers\Api\EscrowApiController;
 use App\Http\Controllers\Api\EscrowWebhookController;
 use App\Http\Controllers\Api\VipApiController;
+use App\Http\Controllers\Api\WhatsappStatusController;
 use App\Http\Controllers\TelegramWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,4 +27,6 @@ Route::middleware('whatsapp-bot')->group(function () {
     Route::post('/escrow/jobs/{job}/release', [EscrowApiController::class, 'release']);
     Route::post('/escrow/jobs/{job}/dispute', [EscrowApiController::class, 'dispute']);
     Route::post('/escrow/jobs/{job}/cancel', [EscrowApiController::class, 'cancel']);
+
+    Route::post('/whatsapp/status', WhatsappStatusController::class);
 });

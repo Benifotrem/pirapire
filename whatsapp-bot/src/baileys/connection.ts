@@ -10,10 +10,12 @@ import QRCode from 'qrcode';
 import { env } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { TelegramNotifier } from '../telegram/telegramNotifier.js';
+import { PirapireApiClient } from '../api/pirapireClient.js';
 
 export type IncomingMessageHandler = (from: string, text: string, socket: WASocket) => Promise<void>;
 
 const telegram = new TelegramNotifier();
+const api = new PirapireApiClient();
 
 // Module-scoped so it survives connectWhatsApp's recursive re-invocation on
 // reconnect (each reconnect attempt creates a fresh closure/socket) — this
@@ -45,9 +47,11 @@ export async function connectWhatsApp(onMessage: IncomingMessageHandler): Promis
       qrcode.generate(qr, { small: true });
 
       QRCode.toBuffer(qr, { type: 'png', width: 512, margin: 2 })
-        .then((buffer) =>
-          telegram.sendPhoto(buffer, '📲 Escaneá este código QR con WhatsApp para vincular el bot de Pirapire.'),
-        )
+        .then((buffer) => {
+          void api.pushWhatsappStatus('qr', buffer.toString('base64'));
+
+          return telegram.sendPhoto(buffer, '📲 Escaneá este código QR con WhatsApp para vincular el bot de Pirapire.');
+        })
         .catch((err) => logger.error({ err }, 'Failed to render/send WhatsApp QR to Telegram'));
     }
 
@@ -57,6 +61,7 @@ export async function connectWhatsApp(onMessage: IncomingMessageHandler): Promis
       const shouldReconnect = !isUnauthorized;
       logger.warn({ statusCode, shouldReconnect }, 'WhatsApp connection closed');
 
+      void api.pushWhatsappStatus('disconnected');
       wasDown = true;
       telegram.sendMessage(
         isUnauthorized
@@ -75,6 +80,7 @@ export async function connectWhatsApp(onMessage: IncomingMessageHandler): Promis
       }
     } else if (connection === 'open') {
       logger.info('Connected to WhatsApp');
+      void api.pushWhatsappStatus('connected');
 
       if (wasDown) {
         wasDown = false;

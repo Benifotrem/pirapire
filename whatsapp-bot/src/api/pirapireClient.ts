@@ -148,4 +148,26 @@ export class PirapireApiClient {
       return false;
     }
   }
+
+  /**
+   * Pushes the current Baileys connection state so the Filament admin panel
+   * (App\Filament\Pages\WhatsappConnection) can show a live QR/connected/
+   * disconnected view without needing SSH or Telegram. Never throws — a
+   * failed push here shouldn't interrupt the WhatsApp connection lifecycle
+   * (Telegram notification is the primary channel; this is a convenience).
+   */
+  async pushWhatsappStatus(status: 'qr' | 'connected' | 'disconnected', qrPngBase64?: string): Promise<void> {
+    try {
+      const { statusCode } = await request(`${this.baseUrl}/whatsapp/status`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ status, qr_png_base64: qrPngBase64 ?? null }),
+      });
+      if (statusCode !== 200) {
+        logger.warn({ statusCode, status }, 'Failed to push WhatsApp status to Pirapire API');
+      }
+    } catch (err) {
+      logger.error({ err, status }, 'Error pushing WhatsApp status to Pirapire API');
+    }
+  }
 }
