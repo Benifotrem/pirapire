@@ -1,6 +1,15 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+/**
+ * `KEY=` in a .env file parses to an empty string, not an absent key —
+ * so a bare `.optional()` doesn't help an *optional-but-validated* field
+ * (e.g. `.url().optional()` still rejects `""` since it's present, just
+ * not a valid URL). Wrap those fields' schema in this so leaving them
+ * blank behaves the same as leaving them out entirely.
+ */
+const emptyStringAsUndefined = (val: unknown) => (val === '' ? undefined : val);
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
@@ -23,7 +32,7 @@ const EnvSchema = z.object({
   // through a local Tor SOCKS proxy — see README "Alertas P2P de
   // RoboSats". Left unset, the poller logs a warning once and stays off;
   // the rest of the bot (!mempool/!vip/!escrow) is unaffected.
-  ROBOSATS_API_BASE_URL: z.string().url().optional(),
+  ROBOSATS_API_BASE_URL: z.preprocess(emptyStringAsUndefined, z.string().url().optional()),
   ROBOSATS_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   ROBOSATS_COORDINATOR: z.string().default('robosats-main'),
 
