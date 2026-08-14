@@ -25,8 +25,8 @@ jobs:
           script: |
             set -e
             cd /opt/pirapire
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin claude/pirapire-bitcoin-lightning-main
+            git reset --hard origin/claude/pirapire-bitcoin-lightning-main
 
             # nginx serves web/public straight off the host (see
             # docker-compose.yml), so the Vite build has to happen here too,
