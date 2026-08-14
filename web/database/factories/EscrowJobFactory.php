@@ -19,7 +19,6 @@ class EscrowJobFactory extends Factory
     public function definition(): array
     {
         $amount = fake()->numberBetween(1000, 500000);
-        $preimage = bin2hex(random_bytes(32));
 
         return [
             'creator_customer_id' => Customer::factory(),
@@ -27,9 +26,8 @@ class EscrowJobFactory extends Factory
             'amount_sats' => $amount,
             'fee_sats' => (int) round($amount * 0.015),
             'status' => 'created',
-            'hold_invoice' => 'lnbc'.fake()->regexify('[a-z0-9]{50}'),
-            'payment_hash' => hash('sha256', hex2bin($preimage)),
-            'preimage' => $preimage,
+            'funding_invoice' => 'lnbc'.fake()->regexify('[a-z0-9]{50}'),
+            'payment_hash' => fake()->sha256(),
             'expires_at' => now()->addHour(),
         ];
     }

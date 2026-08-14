@@ -8,7 +8,7 @@ Plataforma soberana Bitcoin/Lightning para Paraguay. Incluye bot P2P de alertas 
 |---|---|---|
 | **`web/`** | Laravel 11 + FilamentPHP v3 | App web (`pirapire.pro`): login LNURL-auth, dashboard de alertas/VIP, panel de administración, API interna para el bot, servicio de escrow Lightning. |
 | **`whatsapp-bot/`** | Node.js 20 + TypeScript | Motor de alertas P2P de RoboSats, comandos públicos de WhatsApp (`!mempool`, `!vip`, `!escrow`). |
-| **LNbits** | Extensión Hold Invoice | Custodia las hold invoices del escrow (no forma parte de este repo; se referencia como servicio de infraestructura). |
+| **LNbits** | API core de pagos | Wallet custodial de la plataforma para el escrow (no forma parte de este repo; se referencia como servicio de infraestructura). |
 
 Todo corre en un único VPS Ubuntu 24.04 LTS (`179.198.98.224`) vía Docker Compose.
 
@@ -59,9 +59,9 @@ Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, méto
 
 **Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, el poller queda desactivado (loggea un aviso una vez y no reintenta en loop) sin afectar `!mempool`/`!vip`/`!escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza — lo más fiel al diseño de RoboSats es correrlo contra el `.onion` de un coordinador a través de un proxy Tor SOCKS local (no incluido en este repo todavía).
 
-## 3. Escrow Lightning para empleos (hold invoices)
+## 3. Escrow Lightning para empleos
 
-`web/app/Services/Escrow/EscrowService.php` implementa una máquina de estados sobre hold invoices de LNbits (`web/app/Services/Lightning/LnbitsClient.php`):
+`web/app/Services/Escrow/EscrowService.php` implementa una máquina de estados sobre la API de pagos de LNbits (`web/app/Services/Lightning/LnbitsClient.php`):
 
 ```
 created → funded → in_progress → completed
@@ -72,12 +72,15 @@ created → funded → in_progress → completed
 created → cancelled (expira sin fondear)
 ```
 
-- Al crear el trabajo se genera un `preimage` aleatorio, su `payment_hash`, y una hold invoice por `monto + comisión (1.5% por defecto)`.
-- `markFunded()` se dispara desde el webhook de LNbits (`POST /api/escrow/webhook`) cuando el HTLC es aceptado (pagado pero no liquidado).
-- `release()` revela el `preimage` (liquida la hold invoice) y libera los fondos al freelancer.
-- `refund()` cancela la hold invoice, revirtiendo el HTLC y reembolsando al cliente.
-- Las disputas (`openDispute()`) las resuelve un administrador desde el panel de Filament (`EscrowDisputeResource`), que llama a `release()` o `refund()` según corresponda.
+**Importante:** LNbits **no tiene una extensión de "hold invoice"** — verificamos esto contra el registro oficial de extensiones (`lnbits/lnbits-extensions`) y no existe. El diseño original de este proyecto asumía lo contrario; esta sección documenta el diseño real, implementado con la API core de LNbits:
+
+- Al crear el trabajo, `createJob()` genera una factura **normal** por `monto + comisión (1.5% por defecto)` vía `LnbitsClient::createInvoice()`. Cuando el cliente la paga, liquida **de inmediato** en el wallet de LNbits de la plataforma — no queda un HTLC "retenido" esperando revelar un preimage.
+- `markFunded()` se dispara desde el webhook de LNbits (`POST /api/escrow/webhook`) cuando esa factura se paga.
+- `release(job, payoutBolt11)` y `refund(job, refundBolt11)` hacen un **pago saliente** real (`LnbitsClient::payInvoice()`) a una factura bolt11 que el freelancer o el cliente proveen en ese momento — no hay nada que "revelar", porque las facturas Lightning expiran y no se pueden generar de antemano. `release()` paga `amount_sats` (la comisión queda en el wallet); `refund()` paga el monto completo (`amount_sats + fee_sats`).
+- Las disputas (`openDispute()`) las resuelve un administrador desde el panel de Filament (`EscrowDisputeResource`), pidiendo la factura correspondiente antes de liberar o reembolsar.
 - Un job programado (`routes/console.php`, cada 5 min) cancela automáticamente los escrows nunca fondeados que expiraron.
+
+**Implicancia de custodia:** a diferencia de un hold invoice real (donde los fondos quedan en un HTLC hasta liquidarse), acá el wallet de LNbits de la plataforma tiene el saldo real y completo mientras el trabajo está en curso — es un escrow custodial clásico, no un HTLC retenido. Ver la sección de LNbits en "Desarrollo local" para más detalle sobre `FakeWallet` vs. un backend real.
 
 ## 4. Comandos de WhatsApp
 
@@ -178,7 +181,7 @@ Son **tres** archivos `.env` distintos, cada uno con un rol distinto — ninguno
 
 `DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` tienen que ser **iguales** en `.env` (raíz) y en `web/.env`: el primero crea las credenciales del contenedor de Postgres, el segundo es lo que usa Laravel para conectarse a esa misma base.
 
-`FakeWallet` no mueve sats reales — antes de producción, configurá `LNBITS_BACKEND_WALLET_CLASS` apuntando a tu propio nodo Lightning (LND/CLN) y habilitá la extensión **Hold Invoice** desde la UI de administración de LNbits.
+`FakeWallet` no mueve sats reales — es el funding source por defecto, pensado para probar el flujo completo (crear escrow, pagar, liberar) sin arriesgar plata. Las claves de API se consiguen igual que con un backend real: entrá a `http://<tu-VPS>:5000`, dejá que LNbits te cree wallet en el primer acceso, y copiá el **Admin key** y el **Invoice/read key** desde "API docs" en la página del wallet. Antes de producción, cambiá `LNBITS_BACKEND_WALLET_CLASS` a un backend real (`LndRestWallet`, `CoreLightningWallet`, etc.) apuntando a tu propio nodo Lightning — ahí sí las claves y los sats son reales. No hace falta ninguna extensión: el escrow usa la API core de pagos de LNbits (ver sección 3).
 
 ### Tests
 

@@ -44,7 +44,7 @@
             <div class="mx-auto max-w-7xl px-4 py-8 text-sm text-slate-500 sm:px-6 lg:px-8">
                 <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
                     <p>© {{ date('Y') }} Pirapire.pro — Plataforma soberana Bitcoin/Lightning para Paraguay.</p>
-                    <p class="font-mono text-xs text-slate-400">LNURL-auth · Hold Invoices · RoboSats P2P</p>
+                    <p class="font-mono text-xs text-slate-400">LNURL-auth · Escrow Lightning · RoboSats P2P</p>
                 </div>
             </div>
         </footer>

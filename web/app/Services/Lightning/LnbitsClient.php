@@ -7,15 +7,18 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Thin wrapper around a self-hosted LNbits instance's "Hold Invoice"
- * extension REST API, used by App\Services\Escrow\EscrowService to fund,
- * settle, and cancel escrow hold invoices.
+ * Thin wrapper around a self-hosted LNbits instance's core REST API
+ * (POST /api/v1/payments), used by App\Services\Escrow\EscrowService to
+ * fund and pay out escrow jobs.
  *
- * A hold invoice is accepted (HTLC locked) when the payer pays it, but the
- * funds only move when the app later reveals the payment preimage
- * (settle) — or the invoice is cancelled and the HTLC is rolled back
- * (refund). This is what lets an escrow job hold BTC without custody of
- * a private key: LNbits/LND hold the HTLC, the app holds the preimage.
+ * There is no "hold invoice" extension in LNbits — that was this app's
+ * original (incorrect) design assumption. LNbits only exposes regular
+ * invoices: a funding invoice settles into the platform's wallet as soon
+ * as it's paid, and "releasing"/"refunding" an escrow means the platform
+ * actively sends a new outbound payment to a bolt11 invoice supplied by
+ * the freelancer/client at that time — not revealing a preimage on an
+ * invoice still in flight. See EscrowService for the resulting state
+ * machine.
  */
 class LnbitsClient
 {
@@ -25,13 +28,10 @@ class LnbitsClient
 
     private readonly ?string $invoiceReadKey;
 
-    private readonly ?string $extensionPath;
-
     public function __construct(
         ?string $baseUrl = null,
         ?string $adminKey = null,
         ?string $invoiceReadKey = null,
-        ?string $extensionPath = null,
     ) {
         // Readonly properties can only be assigned once — constructor
         // promotion (`private readonly ?string $adminKey = null`) would
@@ -41,72 +41,54 @@ class LnbitsClient
         $this->baseUrl = rtrim($baseUrl ?? config('services.lnbits.base_url'), '/');
         $this->adminKey = $adminKey ?? config('services.lnbits.admin_key');
         $this->invoiceReadKey = $invoiceReadKey ?? config('services.lnbits.invoice_read_key');
-        $this->extensionPath = $extensionPath ?? config('services.lnbits.hold_extension_path');
     }
 
     private function url(string $path): string
     {
-        return $this->baseUrl.$this->extensionPath.$path;
+        return $this->baseUrl.'/api/v1'.$path;
     }
 
     /**
-     * Creates a hold invoice for the given payment_hash/preimage pair.
-     * The preimage must be generated and stored by the caller (EscrowService)
-     * *before* calling this, since LNbits' hold-invoice endpoint accepts a
-     * caller-supplied payment hash rather than generating one itself.
+     * Creates a regular incoming invoice (funding invoice) for the given
+     * amount. Uses the invoice/read key, since creating an invoice only
+     * needs receive permission, not spend permission.
      */
-    public function createHoldInvoice(
-        int $amountSats,
-        string $paymentHash,
-        string $memo,
-        int $expirySeconds,
-    ): array {
-        $response = Http::withHeaders(['X-Api-Key' => $this->adminKey])
-            ->post($this->url('/invoice'), [
-                'amount' => $amountSats,
-                'payment_hash' => $paymentHash,
-                'memo' => $memo,
-                'expiry' => $expirySeconds,
-                'webhook' => route('api.escrow.webhook'),
-            ]);
-
-        if ($response->failed()) {
-            Log::error('LNbits createHoldInvoice failed', ['body' => $response->body()]);
-            throw new RuntimeException('Failed to create hold invoice via LNbits.');
-        }
-
-        return $response->json();
-    }
-
-    public function getInvoiceStatus(string $paymentHash): array
+    public function createInvoice(int $amountSats, string $memo, ?string $webhookUrl = null): array
     {
         $response = Http::withHeaders(['X-Api-Key' => $this->invoiceReadKey])
-            ->get($this->url("/invoice/{$paymentHash}"));
+            ->post($this->url('/payments'), array_filter([
+                'out' => false,
+                'amount' => $amountSats,
+                'memo' => $memo,
+                'webhook' => $webhookUrl,
+            ], fn ($value) => $value !== null));
 
         if ($response->failed()) {
-            throw new RuntimeException("Failed to fetch hold invoice status for {$paymentHash}.");
+            Log::error('LNbits createInvoice failed', ['body' => $response->body()]);
+            throw new RuntimeException('Failed to create invoice via LNbits.');
         }
 
         return $response->json();
     }
 
-    /** Reveals the preimage, settling the HTLC and completing the payment to the payee. */
-    public function settleHoldInvoice(string $paymentHash, string $preimage): bool
+    /**
+     * Pays a bolt11 invoice out of the platform's LNbits wallet — used to
+     * release funds to a freelancer or refund a client. Uses the admin
+     * key, since sending payments needs spend permission.
+     */
+    public function payInvoice(string $bolt11): array
     {
         $response = Http::withHeaders(['X-Api-Key' => $this->adminKey])
-            ->post($this->url("/invoice/{$paymentHash}/settle"), [
-                'preimage' => $preimage,
+            ->post($this->url('/payments'), [
+                'out' => true,
+                'bolt11' => $bolt11,
             ]);
 
-        return $response->successful();
-    }
+        if ($response->failed()) {
+            Log::error('LNbits payInvoice failed', ['body' => $response->body()]);
+            throw new RuntimeException('Failed to pay invoice via LNbits.');
+        }
 
-    /** Cancels the hold invoice, rolling back the HTLC and refunding the payer. */
-    public function cancelHoldInvoice(string $paymentHash): bool
-    {
-        $response = Http::withHeaders(['X-Api-Key' => $this->adminKey])
-            ->post($this->url("/invoice/{$paymentHash}/cancel"));
-
-        return $response->successful();
+        return $response->json();
     }
 }

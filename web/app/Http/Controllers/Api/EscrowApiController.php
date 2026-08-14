@@ -41,7 +41,11 @@ class EscrowApiController extends Controller
 
     public function release(Request $request, EscrowJob $job): JsonResponse
     {
-        return $this->performAction($job, fn () => $this->escrow->release($job));
+        $validated = $request->validate([
+            'payout_bolt11' => 'required|string',
+        ]);
+
+        return $this->performAction($job, fn () => $this->escrow->release($job, $validated['payout_bolt11']));
     }
 
     public function dispute(Request $request, EscrowJob $job): JsonResponse
@@ -82,7 +86,7 @@ class EscrowApiController extends Controller
             'status' => $job->status,
             'amount_sats' => $job->amount_sats,
             'fee_sats' => $job->fee_sats,
-            'hold_invoice' => $job->hold_invoice,
+            'funding_invoice' => $job->funding_invoice,
             'expires_at' => $job->expires_at->toIso8601String(),
         ];
     }

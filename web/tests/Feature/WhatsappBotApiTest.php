@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Alert;
 use App\Models\Customer;
+use App\Models\EscrowJob;
 use App\Models\VipSubscription;
 use App\Services\Lightning\LnbitsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -75,7 +76,9 @@ class WhatsappBotApiTest extends TestCase
     public function test_escrow_job_can_be_created_via_the_api(): void
     {
         $this->mock(LnbitsClient::class, function ($mock) {
-            $mock->shouldReceive('createHoldInvoice')->once()->andReturn(['payment_request' => 'lnbc1testinvoice']);
+            $mock->shouldReceive('createInvoice')
+                ->once()
+                ->andReturn(['payment_request' => 'lnbc1testinvoice', 'payment_hash' => 'testhash123']);
         });
 
         $response = $this->withBotToken()->postJson('/api/escrow/jobs', [
@@ -90,5 +93,35 @@ class WhatsappBotApiTest extends TestCase
         $response->assertJsonPath('fee_sats', 750);
 
         $this->assertDatabaseHas('customers', ['whatsapp_number' => '595983333333@s.whatsapp.net']);
+    }
+
+    public function test_escrow_release_requires_a_payout_invoice(): void
+    {
+        $customer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create([
+            'creator_customer_id' => $customer->id,
+            'status' => 'funded',
+        ]);
+
+        $this->withBotToken()->postJson("/api/escrow/jobs/{$job->id}/release", [])
+            ->assertStatus(422);
+    }
+
+    public function test_escrow_release_pays_out_via_lnbits(): void
+    {
+        $this->mock(LnbitsClient::class, function ($mock) {
+            $mock->shouldReceive('payInvoice')->once()->with('lnbc1payout')->andReturn(['payment_hash' => 'x']);
+        });
+
+        $customer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create([
+            'creator_customer_id' => $customer->id,
+            'status' => 'funded',
+        ]);
+
+        $this->withBotToken()
+            ->postJson("/api/escrow/jobs/{$job->id}/release", ['payout_bolt11' => 'lnbc1payout'])
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
     }
 }

@@ -6,6 +6,7 @@ use App\Filament\Resources\EscrowJobResource\Pages;
 use App\Models\EscrowJob;
 use App\Services\Escrow\EscrowService;
 use DomainException;
+use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -62,16 +63,32 @@ class EscrowJobResource extends Resource
                 Tables\Actions\Action::make('release')
                     ->label('Liberar')
                     ->icon('heroicon-o-check-circle')
-                    ->requiresConfirmation()
                     ->visible(fn (EscrowJob $record) => in_array($record->status, ['funded', 'in_progress', 'disputed'], true))
-                    ->action(fn (EscrowJob $record) => self::runAction($record, fn (EscrowService $s) => $s->release($record))),
+                    ->form([
+                        Forms\Components\Textarea::make('payout_bolt11')
+                            ->label('Factura del freelancer (bolt11)')
+                            ->helperText('Pedísela al freelancer justo antes de liberar — las facturas Lightning expiran.')
+                            ->required(),
+                    ])
+                    ->action(fn (EscrowJob $record, array $data) => self::runAction(
+                        $record,
+                        fn (EscrowService $s) => $s->release($record, $data['payout_bolt11']),
+                    )),
                 Tables\Actions\Action::make('refund')
                     ->label('Reembolsar')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('danger')
-                    ->requiresConfirmation()
                     ->visible(fn (EscrowJob $record) => in_array($record->status, ['funded', 'in_progress', 'disputed'], true))
-                    ->action(fn (EscrowJob $record) => self::runAction($record, fn (EscrowService $s) => $s->refund($record))),
+                    ->form([
+                        Forms\Components\Textarea::make('refund_bolt11')
+                            ->label('Factura del cliente para el reembolso (bolt11)')
+                            ->helperText('Pedísela al cliente justo antes de reembolsar — las facturas Lightning expiran.')
+                            ->required(),
+                    ])
+                    ->action(fn (EscrowJob $record, array $data) => self::runAction(
+                        $record,
+                        fn (EscrowService $s) => $s->refund($record, $data['refund_bolt11']),
+                    )),
             ]);
     }
 

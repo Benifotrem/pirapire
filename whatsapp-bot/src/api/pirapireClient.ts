@@ -24,7 +24,7 @@ export interface EscrowJobResponse {
   status: string;
   amount_sats: number;
   fee_sats: number;
-  hold_invoice: string;
+  funding_invoice: string;
   expires_at: string;
 }
 
@@ -114,7 +114,7 @@ export class PirapireApiClient {
 
   async requestEscrowAction(
     jobId: string,
-    action: 'release' | 'dispute' | 'cancel',
+    action: 'dispute' | 'cancel',
     requestedBy: string,
   ): Promise<boolean> {
     try {
@@ -126,6 +126,25 @@ export class PirapireApiClient {
       return statusCode === 200;
     } catch (err) {
       logger.error({ err, action }, 'Error requesting escrow action');
+      return false;
+    }
+  }
+
+  /**
+   * Releases an escrow job by paying out the given bolt11 invoice —
+   * LNbits has no hold-invoice extension, so there's no preimage to
+   * reveal; releasing means actively sending a fresh payment instead.
+   */
+  async releaseEscrowJob(jobId: string, payoutBolt11: string): Promise<boolean> {
+    try {
+      const { statusCode } = await request(`${this.baseUrl}/escrow/jobs/${jobId}/release`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ payout_bolt11: payoutBolt11 }),
+      });
+      return statusCode === 200;
+    } catch (err) {
+      logger.error({ err }, 'Error releasing escrow job');
       return false;
     }
   }

@@ -16,9 +16,15 @@ use Illuminate\Support\Facades\DB;
  *                    \-> disputed -> completed | refunded
  *   created -> cancelled (expired / never funded)
  *
- * The platform takes a fee (config('services.escrow.fee_percent'), default
- * 1.5%) on top of the job amount; the hold invoice charges amount+fee so
- * the freelancer receives the full job amount on release.
+ * LNbits has no "hold invoice" extension (see LnbitsClient), so this
+ * isn't a true HTLC-hold escrow — the client's funding invoice settles
+ * into the platform's LNbits wallet immediately, and the platform holds
+ * that balance for the life of the job. "Releasing" or "refunding" means
+ * actively paying out a fresh invoice supplied by the freelancer/client
+ * at that moment (Lightning invoices expire, so there's nothing to store
+ * upfront). The platform takes a fee (config('services.escrow.fee_percent'),
+ * default 1.5%) on top of the job amount, charged in the funding invoice;
+ * release only pays out amount_sats, so the fee stays in the wallet.
  */
 class EscrowService
 {
@@ -43,14 +49,11 @@ class EscrowService
         }
 
         $feeSats = $this->calculateFee($amountSats);
-        $preimage = bin2hex(random_bytes(32));
-        $paymentHash = hash('sha256', hex2bin($preimage));
 
-        $invoice = $this->lnbits->createHoldInvoice(
+        $invoice = $this->lnbits->createInvoice(
             amountSats: $amountSats + $feeSats,
-            paymentHash: $paymentHash,
             memo: "Pirapire escrow: {$description}",
-            expirySeconds: self::DEFAULT_EXPIRY_SECONDS,
+            webhookUrl: route('api.escrow.webhook'),
         );
 
         return EscrowJob::create([
@@ -59,14 +62,13 @@ class EscrowService
             'amount_sats' => $amountSats,
             'fee_sats' => $feeSats,
             'status' => 'created',
-            'hold_invoice' => $invoice['payment_request'] ?? $invoice['bolt11'] ?? '',
-            'payment_hash' => $paymentHash,
-            'preimage' => $preimage,
+            'funding_invoice' => $invoice['payment_request'] ?? $invoice['bolt11'] ?? '',
+            'payment_hash' => $invoice['payment_hash'],
             'expires_at' => now()->addSeconds(self::DEFAULT_EXPIRY_SECONDS),
         ]);
     }
 
-    /** Called from the LNbits webhook once the hold invoice's HTLC is accepted (paid but not settled). */
+    /** Called from the LNbits webhook once the funding invoice is paid. */
     public function markFunded(EscrowJob $job): void
     {
         $this->assertStatus($job, ['created']);
@@ -81,19 +83,19 @@ class EscrowService
         $job->update(['status' => 'in_progress']);
     }
 
-    /** Releases funds to the freelancer by revealing the preimage (settling the hold invoice). */
-    public function release(EscrowJob $job): void
+    /** Releases funds to the freelancer by paying the bolt11 invoice they supply. */
+    public function release(EscrowJob $job, string $payoutBolt11): void
     {
         $this->assertStatus($job, ['funded', 'in_progress', 'disputed']);
 
-        DB::transaction(function () use ($job) {
-            $settled = $this->lnbits->settleHoldInvoice($job->payment_hash, $job->preimage);
+        DB::transaction(function () use ($job, $payoutBolt11) {
+            $this->lnbits->payInvoice($payoutBolt11);
 
-            if (! $settled) {
-                throw new DomainException('No se pudo liquidar la hold invoice en LNbits.');
-            }
-
-            $job->update(['status' => 'completed', 'settled_at' => now()]);
+            $job->update([
+                'status' => 'completed',
+                'settled_at' => now(),
+                'payout_destination' => $payoutBolt11,
+            ]);
 
             if ($job->status === 'disputed') {
                 $job->disputes()->where('status', 'open')->update([
@@ -105,19 +107,18 @@ class EscrowService
         });
     }
 
-    /** Cancels the hold invoice, rolling back the HTLC so the payer is refunded. */
-    public function refund(EscrowJob $job): void
+    /** Refunds the client in full (amount + fee) by paying the bolt11 invoice they supply. */
+    public function refund(EscrowJob $job, string $refundBolt11): void
     {
-        $this->assertStatus($job, ['created', 'funded', 'in_progress', 'disputed']);
+        $this->assertStatus($job, ['funded', 'in_progress', 'disputed']);
 
-        DB::transaction(function () use ($job) {
-            $cancelled = $this->lnbits->cancelHoldInvoice($job->payment_hash);
+        DB::transaction(function () use ($job, $refundBolt11) {
+            $this->lnbits->payInvoice($refundBolt11);
 
-            if (! $cancelled) {
-                throw new DomainException('No se pudo cancelar la hold invoice en LNbits.');
-            }
-
-            $job->update(['status' => 'refunded']);
+            $job->update([
+                'status' => 'refunded',
+                'payout_destination' => $refundBolt11,
+            ]);
 
             $job->disputes()->where('status', 'open')->update([
                 'status' => 'resolved',

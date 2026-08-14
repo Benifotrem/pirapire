@@ -85,12 +85,13 @@ services:
       - web
 
   # Self-hosted LNbits instance used by the escrow service (see
-  # web/app/Services/Lightning/LnbitsClient.php). Ships here with the
-  # FakeWallet funding source so `docker compose up` works out of the box
-  # for local development — it does NOT move real sats. Before going to
-  # production, set LNBITS_BACKEND_WALLET_CLASS to a real backend (LndRestWallet,
-  # CoreLightningWallet, etc.) pointing at your own Lightning node, and
-  # install/enable the "Hold Invoice" extension from the LNbits admin UI.
+  # web/app/Services/Lightning/LnbitsClient.php) via its core payments
+  # API — no extension needed (LNbits has no "hold invoice" extension).
+  # Ships here with the FakeWallet funding source so `docker compose up`
+  # works out of the box for local development — it does NOT move real
+  # sats. Before going to production, set LNBITS_BACKEND_WALLET_CLASS to
+  # a real backend (LndRestWallet, CoreLightningWallet, etc.) pointing at
+  # your own Lightning node.
   lnbits:
     image: lnbitsdocker/lnbits-legend:latest
     restart: unless-stopped

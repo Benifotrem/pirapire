@@ -40,9 +40,9 @@ return [
     | LNbits (Lightning Network Job Escrow)
     |--------------------------------------------------------------------------
     |
-    | Talks to a self-hosted LNbits instance running the "Hold Invoice"
-    | extension, used to escrow Bitcoin job payments. See
-    | app/Services/Lightning/LnbitsClient.php.
+    | Talks to a self-hosted LNbits instance's core payments API to fund
+    | and pay out escrow jobs. See app/Services/Lightning/LnbitsClient.php
+    | and app/Services/Escrow/EscrowService.php.
     |
     */
     'lnbits' => [
@@ -50,9 +50,6 @@ return [
         'admin_key' => env('LNBITS_ADMIN_KEY'),
         'invoice_read_key' => env('LNBITS_INVOICE_READ_KEY'),
         'webhook_secret' => env('LNBITS_WEBHOOK_SECRET'),
-        // Path prefix for the Hold Invoice extension's REST API. Adjust if
-        // your coordinator runs a different extension version.
-        'hold_extension_path' => env('LNBITS_HOLD_EXTENSION_PATH', '/holdinvoice/api/v1'),
     ],
 
     /*
@@ -66,15 +63,6 @@ return [
     */
     'whatsapp_bot' => [
         'api_token' => env('WHATSAPP_BOT_API_TOKEN'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | RoboSats
-    |--------------------------------------------------------------------------
-    */
-    'robosats' => [
-        'base_url' => env('ROBOSATS_API_BASE_URL', 'https://api.robosats.com/api'),
     ],
 
     'escrow' => [

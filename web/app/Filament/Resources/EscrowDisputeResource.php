@@ -49,35 +49,45 @@ class EscrowDisputeResource extends Resource
                 Tables\Actions\Action::make('release_to_freelancer')
                     ->label('Liberar al freelancer')
                     ->icon('heroicon-o-check-circle')
-                    ->requiresConfirmation()
                     ->visible(fn (EscrowDispute $record) => $record->status === 'open')
                     ->form([
+                        Forms\Components\Textarea::make('payout_bolt11')
+                            ->label('Factura del freelancer (bolt11)')
+                            ->helperText('Pedísela justo antes de resolver — las facturas Lightning expiran.')
+                            ->required(),
                         Forms\Components\Textarea::make('resolution_notes')->label('Notas de resolución'),
                     ])
-                    ->action(fn (EscrowDispute $record, array $data) => self::resolve($record, 'release', $data['resolution_notes'] ?? null)),
+                    ->action(fn (EscrowDispute $record, array $data) => self::resolve(
+                        $record, 'release', $data['payout_bolt11'], $data['resolution_notes'] ?? null,
+                    )),
                 Tables\Actions\Action::make('refund_client')
                     ->label('Reembolsar al cliente')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('danger')
-                    ->requiresConfirmation()
                     ->visible(fn (EscrowDispute $record) => $record->status === 'open')
                     ->form([
+                        Forms\Components\Textarea::make('payout_bolt11')
+                            ->label('Factura del cliente para el reembolso (bolt11)')
+                            ->helperText('Pedísela justo antes de resolver — las facturas Lightning expiran.')
+                            ->required(),
                         Forms\Components\Textarea::make('resolution_notes')->label('Notas de resolución'),
                     ])
-                    ->action(fn (EscrowDispute $record, array $data) => self::resolve($record, 'refund', $data['resolution_notes'] ?? null)),
+                    ->action(fn (EscrowDispute $record, array $data) => self::resolve(
+                        $record, 'refund', $data['payout_bolt11'], $data['resolution_notes'] ?? null,
+                    )),
             ]);
     }
 
-    private static function resolve(EscrowDispute $dispute, string $action, ?string $notes): void
+    private static function resolve(EscrowDispute $dispute, string $action, string $payoutBolt11, ?string $notes): void
     {
         try {
             $escrowService = app(EscrowService::class);
             $job = $dispute->escrowJob;
 
             if ($action === 'release') {
-                $escrowService->release($job);
+                $escrowService->release($job, $payoutBolt11);
             } else {
-                $escrowService->refund($job);
+                $escrowService->refund($job, $payoutBolt11);
             }
 
             $dispute->update([
