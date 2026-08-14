@@ -5,6 +5,14 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-in
 COPY . .
 RUN composer dump-autoload --optimize --no-dev
 
+FROM node:20-alpine AS assets
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY resources ./resources
+COPY vite.config.js tailwind.config.js postcss.config.js ./
+RUN npm run build
+
 FROM php:8.3-fpm-alpine
 
 RUN apk add --no-cache \
@@ -28,6 +36,7 @@ RUN apk add --no-cache \
 
 WORKDIR /var/www/html
 COPY --from=vendor /app ./
+COPY --from=assets /app/public/build ./public/build
 
 RUN chown -R www-data:www-data storage bootstrap/cache
 

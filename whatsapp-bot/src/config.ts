@@ -29,6 +29,11 @@ const EnvSchema = z.object({
 
   // Escrow
   ESCROW_FEE_PERCENT: z.coerce.number().min(0).default(1.5),
+
+  // Telegram admin healthcheck / QR recovery bot (optional: notifications
+  // are skipped with a warning if either is unset — see src/telegram/).
+  TELEGRAM_ADMIN_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_ADMIN_CHAT_ID: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

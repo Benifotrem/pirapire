@@ -62,4 +62,10 @@ class EscrowJob extends Model
     {
         return $this->hasMany(EscrowDispute::class);
     }
+
+    /** Short human-facing contract code shown in the UI, e.g. "#ESC-A1B2C3D4". */
+    public function contractCode(): string
+    {
+        return '#ESC-'.strtoupper(substr($this->id, 0, 8));
+    }
 }

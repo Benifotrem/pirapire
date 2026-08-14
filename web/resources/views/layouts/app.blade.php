@@ -1,51 +1,53 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="scroll-smooth">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? 'Pirapire.pro' }}</title>
-    <style>
-        :root { color-scheme: dark; }
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #0b0e11;
-            color: #e8e8e8;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        header {
-            padding: 1.25rem 2rem;
-            border-bottom: 1px solid #1c2128;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        header a { color: #f7931a; text-decoration: none; font-weight: 700; font-size: 1.2rem; }
-        main { flex: 1; padding: 2rem; max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-        .card { background: #14181f; border: 1px solid #1c2128; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .btn { background: #f7931a; color: #0b0e11; border: none; border-radius: 8px; padding: 0.6rem 1.2rem; font-weight: 600; cursor: pointer; }
-        .btn-secondary { background: transparent; border: 1px solid #2c333d; color: #e8e8e8; }
-        input, select { background: #0b0e11; border: 1px solid #2c333d; color: #e8e8e8; border-radius: 6px; padding: 0.5rem; }
-        label { display: block; font-size: 0.85rem; color: #9aa4af; margin-bottom: 0.25rem; }
-        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-        .status-badge.vip { background: #f7931a33; color: #f7931a; }
-        .status-badge.free { background: #2c333d; color: #9aa4af; }
-    </style>
+    <title>{{ $title ?? 'Pirapire.pro — Bitcoin & Lightning soberano para Paraguay' }}</title>
+    <meta name="description" content="Alertas P2P de RoboSats, Escrow Lightning para empleos y herramientas de Mempool — con login soberano vía LNURL-auth.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><text y=%2220%22 font-size=%2220%22>₿</text></svg>">
+
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body>
-    <header>
-        <a href="{{ route('home') }}">₿ Pirapire.pro</a>
-        @auth('customer')
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button class="btn btn-secondary" type="submit">Cerrar sesión</button>
-            </form>
-        @endauth
-    </header>
-    <main>
-        @yield('content')
-    </main>
+<body class="min-h-screen bg-white font-sans text-slate-700 antialiased">
+    <div class="flex min-h-screen flex-col">
+        <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur">
+            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+                <a href="{{ route('home') }}" class="flex items-center gap-2 text-lg font-bold text-slate-900">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">₿</span>
+                    Pirapire<span class="text-blue-600">.pro</span>
+                </a>
+
+                <nav class="flex items-center gap-3">
+                    @auth('customer')
+                        <a href="{{ route('dashboard') }}" class="text-sm font-medium text-slate-600 transition hover:text-blue-600">Panel</a>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50">
+                                Cerrar sesión
+                            </button>
+                        </form>
+                    @else
+                        <a href="{{ route('login') }}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
+                            Iniciar sesión con Lightning
+                        </a>
+                    @endauth
+                </nav>
+            </div>
+        </header>
+
+        <main class="flex-1">
+            @yield('content')
+        </main>
+
+        <footer class="border-t border-slate-200 bg-slate-50">
+            <div class="mx-auto max-w-7xl px-4 py-8 text-sm text-slate-500 sm:px-6 lg:px-8">
+                <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
+                    <p>© {{ date('Y') }} Pirapire.pro — Plataforma soberana Bitcoin/Lightning para Paraguay.</p>
+                    <p class="font-mono text-xs text-slate-400">LNURL-auth · Hold Invoices · RoboSats P2P</p>
+                </div>
+            </div>
+        </footer>
+    </div>
 </body>
 </html>

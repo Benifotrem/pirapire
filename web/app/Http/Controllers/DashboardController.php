@@ -17,6 +17,7 @@ class DashboardController extends Controller
         return view('dashboard', [
             'customer' => $customer,
             'alerts' => $customer->alerts()->latest()->get(),
+            'escrowJobs' => $customer->escrowJobsCreated()->latest()->limit(10)->get(),
             'isVip' => $customer->isVip(),
         ]);
     }

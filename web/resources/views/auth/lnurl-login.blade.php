@@ -1,26 +1,40 @@
 @extends('layouts.app', ['title' => 'Iniciar sesión — Pirapire.pro'])
 
 @section('content')
-    <div class="card" style="text-align:center;">
-        <h1>Iniciar sesión con Lightning</h1>
-        <p style="color:#9aa4af;">Escaneá este código con tu billetera compatible con LNURL-auth (Zeus, Blixt, Phoenix, Alby...). Sin correo, sin contraseña — tu clave es tu identidad.</p>
+    <div class="flex min-h-[calc(100vh-73px)] items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 px-4 py-16">
+        <div class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-lg text-white">⚡</span>
 
-        <div style="background:#fff; padding:1rem; border-radius:12px; display:inline-block; margin:1rem 0;">
-            {!! $qrSvg !!}
+            <h1 class="mt-4 text-2xl font-bold text-slate-900">Iniciar sesión con Lightning</h1>
+            <p class="mt-2 text-sm text-slate-500">
+                Escaneá este código con tu billetera compatible con LNURL-auth (Phoenix, Blink, Zeus, Alby...). Sin correo, sin contraseña — tu clave es tu identidad.
+            </p>
+
+            <div class="mx-auto mt-6 inline-block rounded-2xl border-2 border-slate-100 bg-white p-4 shadow-inner">
+                {!! $qrSvg !!}
+            </div>
+
+            <a
+                href="lightning:{{ $lnurl }}"
+                class="mt-6 block w-full rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-90"
+            >
+                Abrir en la billetera
+            </a>
+
+            <details class="mt-4 text-left">
+                <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-600">Copiar LNURL manualmente</summary>
+                <code class="mt-2 block break-all rounded-lg bg-slate-50 p-3 font-mono text-xs text-slate-600">{{ $lnurl }}</code>
+            </details>
+
+            @error('lnurl')
+                <p class="mt-4 text-sm font-medium text-rose-600">{{ $message }}</p>
+            @enderror
+
+            <p class="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <span class="h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
+                Esperando confirmación de la billetera…
+            </p>
         </div>
-
-        <p>
-            <a href="lightning:{{ $lnurl }}" class="btn" style="text-decoration:none; display:inline-block;">Abrir en la billetera</a>
-        </p>
-
-        <details style="margin-top:1rem; text-align:left;">
-            <summary style="cursor:pointer; color:#9aa4af;">Copiar LNURL manualmente</summary>
-            <code style="word-break:break-all; display:block; margin-top:0.5rem; font-size:0.75rem;">{{ $lnurl }}</code>
-        </details>
-
-        @error('lnurl')
-            <p style="color:#ff6b6b;">{{ $message }}</p>
-        @enderror
     </div>
 
     <script>

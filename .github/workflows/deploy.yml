@@ -27,6 +27,13 @@ jobs:
             cd /opt/pirapire
             git fetch origin main
             git reset --hard origin/main
+
+            # nginx serves web/public straight off the host (see
+            # docker-compose.yml), so the Vite build has to happen here too,
+            # not just inside the web image. Uses a throwaway Node
+            # container so the VPS doesn't need Node installed directly.
+            docker run --rm -v "$PWD/web":/app -w /app node:20-alpine sh -c "npm ci && npm run build"
+
             docker compose pull --ignore-pull-failures
             docker compose build
             docker compose run --rm web php artisan migrate --force

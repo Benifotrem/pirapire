@@ -31,11 +31,25 @@ jobs:
           path: vendor
           key: composer-${{ hashFiles('web/composer.lock') }}
 
-      - name: Install dependencies
+      - name: Install PHP dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Check code style (Pint)
         run: ./vendor/bin/pint --test
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend assets
+        # Tests render views that use @vite(); without a built manifest
+        # those requests would fail with "Vite manifest not found".
+        run: |
+          npm ci
+          npm run build
 
       - name: Prepare environment
         run: |

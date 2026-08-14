@@ -91,6 +91,30 @@ created → cancelled (expira sin fondear)
 
 Implementación: `whatsapp-bot/src/commands/`.
 
+## 5. Healthcheck y recuperación por Telegram
+
+`whatsapp-bot/src/telegram/telegramNotifier.ts` mantiene al operador del VPS al tanto del estado de la sesión de WhatsApp (Baileys) sin tener que mirar logs, vía un bot personal de Telegram (`TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`, ambos opcionales — sin ellos el bot funciona igual y solo registra una advertencia).
+
+Se engancha al listener `connection.update` de Baileys (`whatsapp-bot/src/baileys/connection.ts`):
+
+- **Conexión cerrada o no autorizada** (`closed` / `loggedOut`): alerta urgente inmediata al chat de Telegram.
+- **Nuevo código QR emitido**: se renderiza como imagen PNG (`qrcode`) y se envía directamente como foto al chat, para volver a vincular la sesión sin acceso a la terminal del VPS.
+- **Reconexión exitosa** tras una caída: mensaje `✅ WhatsApp connection restored successfully!`.
+
+## 6. Frontend
+
+`pirapire.pro` usa Tailwind CSS (ya configurado con Vite) con una estética inspirada en RoboSats: fondos claros (`bg-white` / `bg-slate-50`), acentos en azul eléctrico (`bg-blue-600`) y gradientes azul→púrpura (`from-blue-600 via-indigo-600 to-purple-600`) en tarjetas/banners, y fuente monoespaciada (`font-mono`) para montos en sats, el texto del LNURL y los códigos de contrato de escrow (`#ESC-XXXXXXXX`, ver `EscrowJob::contractCode()`).
+
+- `resources/views/welcome.blade.php`: landing con hero de video a pantalla completa y tres tarjetas de ilustración estilo cómic (`x-comic-card`).
+- `resources/views/auth/lnurl-login.blade.php`: modal centrado con QR de alto contraste para escaneo instantáneo desde la billetera.
+- `resources/views/dashboard.blade.php`: panel del usuario con estado VIP, alertas y contratos de escrow.
+
+**Assets pendientes de subir** (el sitio funciona sin ellos gracias a los *fallbacks*): las ilustraciones estilo cómic (`public/images/p2p-alerts.webp`, `escrow-service.webp`, `mempool-tools.webp`) tienen un fallback automático a un ícono SVG con relleno degradado (`resources/views/components/comic-card.blade.php`, vía `onerror`) mientras no exista el archivo; el video del hero (`public/videos/hero-process.mp4`) usa `poster="/images/hero-poster.webp"` como respaldo visual. Colocá los archivos reales en `public/images/` y `public/videos/` — no requieren cambios de código.
+
+```bash
+cd web && npm install && npm run build   # compila Tailwind/Vite (public/build/manifest.json)
+```
+
 ## Estructura del repositorio
 
 ```
@@ -119,8 +143,10 @@ pirapire/
 cd web
 cp .env.example .env
 composer install
+npm install
 php artisan key:generate
 php artisan migrate
+npm run dev &        # Vite dev server (Tailwind hot-reload)
 php artisan serve
 
 # 2. Bot de WhatsApp
@@ -135,6 +161,7 @@ O con Docker Compose (recomendado para un entorno completo, incluyendo Postgres,
 ```bash
 cp web/.env.example web/.env
 cp whatsapp-bot/.env.example whatsapp-bot/.env
+(cd web && npm install && npm run build)   # nginx serves public/ straight off the host
 docker compose up --build
 ```
 
@@ -155,6 +182,7 @@ Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
 - `LNBITS_ADMIN_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia las hold invoices.
 - `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
+- `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`: bot y chat de Telegram para las alertas de salud/QR de la sesión de WhatsApp (opcional).
 
 ## CI/CD
 
