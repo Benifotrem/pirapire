@@ -1,23 +1,15 @@
-@php
-    $colors = [
-        'red' => ['#ff1a1a', '0 0 6px #ff1a1a, 0 0 12px #ff0000'],
-        'green' => ['#22ff55', '0 0 6px #22ff55, 0 0 12px #00ff00'],
-        'blue' => ['#33d1ff', '0 0 6px #33d1ff, 0 0 12px #00aaff'],
-    ];
-@endphp
-
 @if (($ledDisplay['enabled'] ?? false) && ! empty($ledDisplay['ads']))
     <a
         id="led-display"
         href="#"
         target="_blank"
         rel="noopener sponsored"
-        class="mx-3 hidden h-9 flex-1 items-center overflow-hidden rounded-md border border-black bg-black px-3 sm:flex"
-        style="box-shadow: inset 0 0 8px rgba(0,0,0,0.8);"
+        class="mx-3 hidden h-[80%] flex-1 items-center overflow-hidden rounded-md border border-black bg-black px-4 sm:flex"
+        style="box-shadow: inset 0 0 10px rgba(0,0,0,0.85);"
         data-mode="{{ $ledDisplay['color'] }}"
         data-ads="{{ json_encode($ledDisplay['ads']) }}"
     >
-        <span id="led-display-text" class="whitespace-nowrap font-mono text-sm font-bold tracking-wider"></span>
+        <span id="led-display-text" class="whitespace-nowrap font-mono text-3xl font-bold tracking-wider"></span>
     </a>
 
     <script>

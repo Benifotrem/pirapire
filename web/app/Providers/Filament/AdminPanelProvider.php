@@ -30,6 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->brandName('Pirapire Admin')
+            ->favicon(asset('images/favicon.png'))
             ->login()
             ->colors([
                 'primary' => Color::Amber,
