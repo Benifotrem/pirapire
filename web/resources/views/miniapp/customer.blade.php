@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Pirapire</title>
+    <title>BØLT</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     @vite(['resources/css/app.css'])
     <style>
@@ -33,6 +34,10 @@
 
         <!-- Inicio -->
         <section data-panel="inicio">
+            <div class="flex items-center justify-center py-2">
+                <img src="{{ asset('images/logo.png') }}" alt="BØLT" class="h-20 w-20 object-contain">
+            </div>
+
             <div class="rounded-2xl p-5 text-white shadow-sm" style="background: linear-gradient(to right, #2563eb, #4f46e5, #7c3aed)">
                 <p id="vip-badge" class="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">Cargando…</p>
                 <p id="vip-detail" class="mt-3 text-sm text-white/90"></p>
