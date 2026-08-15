@@ -197,6 +197,8 @@ Entre el logo y el botón de login, el header muestra un cartel estilo LED de lo
 
 `App\View\Composers\LedDisplayComposer` inyecta los anuncios activos y el color configurado en cada página que extiende `layouts.app` (cacheado 30s vía `Cache::remember`, invalidado al instante al guardar cambios en el panel). Si no hay anuncios activos o el cartel está apagado, no se renderiza nada.
 
+**Alta de comercios, sin intervención manual del admin:** en `/anunciar` (`App\Http\Controllers\LedAdSubmissionController`) hay un formulario público pensado para comercios paraguayos que aceptan Bitcoin — nombre, rubro, ciudad, si acepta Lightning/on-chain, el mensaje y enlace para el cartel, y datos de contacto (estos últimos no se publican). Cada envío queda `pending` en **Solicitudes de comercios** (`App\Filament\Resources\LedAdSubmissionResource`, con badge de pendientes en el menú) hasta que un admin lo revisa: **Aprobar** deja editar el mensaje/enlace antes de confirmar y crea el `LedAd` correspondiente; **Rechazar** solo lo descarta, con una nota opcional. Nada llega al cartel público sin pasar por esa revisión.
+
 ## Estructura del repositorio
 
 ```

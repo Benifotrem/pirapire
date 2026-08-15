@@ -5,11 +5,21 @@ use App\Http\Controllers\Auth\StaffLnurlAuthController;
 use App\Http\Controllers\Auth\StaffTelegramAuthController;
 use App\Http\Controllers\Auth\TelegramLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LedAdSubmissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+// Self-service form for the header LED ticker's placeholder ad — see
+// App\Http\Controllers\LedAdSubmissionController. Submissions land as
+// `pending` and only reach the public ticker once approved from Filament
+// (App\Filament\Resources\LedAdSubmissionResource).
+Route::get('/anunciar', [LedAdSubmissionController::class, 'show'])->name('led-ad-submission.show');
+Route::post('/anunciar', [LedAdSubmissionController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('led-ad-submission.store');
 
 // Telegram Mini Apps — static shells opened from a "Web App" button inside
 // each bot. No server-side auth here (there's no Laravel session inside
