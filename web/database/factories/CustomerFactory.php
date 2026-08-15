@@ -20,7 +20,7 @@ class CustomerFactory extends Factory
         return [
             'linking_key' => bin2hex(random_bytes(33)),
             'display_name' => fake()->userName(),
-            'whatsapp_number' => '5959'.fake()->numerify('########').'@s.whatsapp.net',
+            'telegram_chat_id' => (string) fake()->unique()->numberBetween(100000000, 999999999),
         ];
     }
 }

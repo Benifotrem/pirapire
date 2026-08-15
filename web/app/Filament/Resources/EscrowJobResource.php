@@ -25,8 +25,8 @@ class EscrowJobResource extends Resource
 
     public static function form(Form $form): Form
     {
-        // Escrow jobs are created via the WhatsApp bot / API, never manually
-        // in the admin panel — this resource is read/act-only.
+        // Escrow jobs are created via the Telegram bot, never manually in
+        // the admin panel — this resource is read/act-only.
         return $form->schema([]);
     }
 
@@ -35,7 +35,7 @@ class EscrowJobResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')->label('ID')->limit(8)->copyable(),
-                Tables\Columns\TextColumn::make('creator.whatsapp_number')->label('Cliente')->placeholder('—'),
+                Tables\Columns\TextColumn::make('creator.telegram_chat_id')->label('Cliente')->placeholder('—'),
                 Tables\Columns\TextColumn::make('description')->limit(40),
                 Tables\Columns\TextColumn::make('amount_sats')->label('Sats'),
                 Tables\Columns\TextColumn::make('fee_sats')->label('Comisión'),

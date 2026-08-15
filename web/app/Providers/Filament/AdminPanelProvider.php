@@ -52,10 +52,6 @@ class AdminPanelProvider extends PanelProvider
                     ->url('/staff-login')
                     ->icon('heroicon-o-bolt'),
                 MenuItem::make()
-                    ->label('Vincular WhatsApp 💬')
-                    ->url('/staff-login-whatsapp')
-                    ->icon('heroicon-o-chat-bubble-left-right'),
-                MenuItem::make()
                     ->label('Vincular Telegram 📨')
                     ->url('/staff-link-telegram')
                     ->icon('heroicon-o-paper-airplane'),

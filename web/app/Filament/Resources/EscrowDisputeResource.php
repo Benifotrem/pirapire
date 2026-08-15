@@ -37,7 +37,7 @@ class EscrowDisputeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('escrowJob.id')->label('Escrow')->limit(8),
-                Tables\Columns\TextColumn::make('openedBy.whatsapp_number')->label('Abierto por')->placeholder('—'),
+                Tables\Columns\TextColumn::make('openedBy.telegram_chat_id')->label('Abierto por')->placeholder('—'),
                 Tables\Columns\TextColumn::make('reason')->limit(50),
                 Tables\Columns\TextColumn::make('status')->badge()->color(fn (string $state) => $state === 'open' ? 'danger' : 'success'),
                 Tables\Columns\TextColumn::make('created_at')->dateTime()->since(),

@@ -33,14 +33,6 @@ web/bootstrap/cache/*
 web/.phpunit.cache
 web/.phpunit.result.cache
 
-### Node / WhatsApp bot ###
-whatsapp-bot/node_modules/
-whatsapp-bot/dist/
-whatsapp-bot/.env
-whatsapp-bot/auth_sessions/
-whatsapp-bot/*.log
-whatsapp-bot/coverage/
-
 ### Docker ###
 docker/volumes/
 docker/nginx/certs/*

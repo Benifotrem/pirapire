@@ -44,10 +44,6 @@ jobs:
               echo "Missing web/.env — the Laravel app config. Copy from web/.env.example and fill in secrets."
               env_ok=0
             fi
-            if [ ! -f whatsapp-bot/.env ]; then
-              echo "Missing whatsapp-bot/.env — the WhatsApp bot config. Copy from whatsapp-bot/.env.example and fill in secrets."
-              env_ok=0
-            fi
             if [ ! -f docker/nginx/certs/cloudflare-origin.pem ] || [ ! -f docker/nginx/certs/cloudflare-origin.key ]; then
               echo "Missing docker/nginx/certs/cloudflare-origin.{pem,key} — the Cloudflare Origin Certificate nginx needs for Full (strict) mode. See README 'HTTPS con Cloudflare'."
               env_ok=0

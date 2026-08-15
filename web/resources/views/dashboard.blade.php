@@ -11,17 +11,17 @@
                 </span>
                 <p class="mt-2 text-sm {{ $isVip ? 'text-white/90' : 'text-slate-500' }}">
                     @if ($isVip)
-                        Recibís alertas P2P de RoboSats de forma instantánea por WhatsApp.
+                        Recibís alertas P2P de RoboSats de forma instantánea por Telegram.
                     @else
                         Tus alertas P2P llegan con 10 minutos de retraso. Actualizá a VIP para recibirlas al instante.
                     @endif
                 </p>
             </div>
             <div class="px-6 py-4 text-sm">
-                @if ($customer->whatsapp_number)
-                    <p class="text-slate-500">WhatsApp vinculado: <span class="font-mono text-slate-700">{{ $customer->whatsapp_number }}</span></p>
+                @if ($customer->telegram_chat_id)
+                    <p class="text-slate-500">Telegram vinculado ✓</p>
                 @else
-                    <p class="text-rose-600">Todavía no vinculaste un número de WhatsApp. Enviá <code class="font-mono">!vincular</code> al bot para recibir alertas.</p>
+                    <p class="text-rose-600">Todavía no vinculaste Telegram. Mandale <code class="font-mono">/start</code> al bot para recibir alertas.</p>
                 @endif
             </div>
         </div>
@@ -107,7 +107,7 @@
         {{-- Escrow contracts ------------------------------------------------ --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-900">Mis contratos de escrow</h2>
-            <p class="mt-1 text-xs text-slate-400">Creados desde WhatsApp con <code class="font-mono">!escrow create</code>.</p>
+            <p class="mt-1 text-xs text-slate-400">Creados desde Telegram con <code class="font-mono">/escrow create</code>.</p>
 
             <div class="mt-4 divide-y divide-slate-100">
                 @forelse ($escrowJobs as $job)

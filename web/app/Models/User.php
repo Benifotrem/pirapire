@@ -30,7 +30,6 @@ class User extends Authenticatable implements FilamentUser
         'password',
         'role',
         'linking_key',
-        'whatsapp_number',
         'telegram_chat_id',
     ];
 

@@ -18,7 +18,7 @@ class Customer extends Authenticatable
     protected $fillable = [
         'linking_key',
         'display_name',
-        'whatsapp_number',
+        'telegram_chat_id',
         'last_login_at',
     ];
 

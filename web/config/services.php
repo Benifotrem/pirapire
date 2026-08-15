@@ -52,42 +52,67 @@ return [
         'webhook_secret' => env('LNBITS_WEBHOOK_SECRET'),
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | WhatsApp bot (internal service-to-service auth)
-    |--------------------------------------------------------------------------
-    |
-    | The Node.js WhatsApp bot authenticates to routes/api.php with this
-    | bearer token. Rotate it independently of any user-facing credential.
-    |
-    */
-    'whatsapp_bot' => [
-        'api_token' => env('WHATSAPP_BOT_API_TOKEN'),
-        // Reverse direction: Laravel -> bot, used to deliver admin login
-        // codes over WhatsApp. See App\Services\Whatsapp\WhatsappBotClient.
-        'internal_url' => env('WHATSAPP_BOT_INTERNAL_URL', 'http://whatsapp-bot:3001'),
-        'internal_token' => env('WHATSAPP_BOT_INTERNAL_TOKEN'),
-    ],
-
     'escrow' => [
         'fee_percent' => env('ESCROW_FEE_PERCENT', 1.5),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Telegram (admin panel login)
+    | Telegram (admin panel login) — private ops bot
     |--------------------------------------------------------------------------
     |
-    | Same bot as whatsapp-bot's health-check notifier (TELEGRAM_ADMIN_BOT_TOKEN
-    | must be the same token in both .env files), used here to deliver admin
-    | login codes directly over the Bot API — no dependency on the Node bot
-    | or WhatsApp being up. See App\Services\Telegram\TelegramBotClient and
-    | App\Http\Controllers\TelegramWebhookController.
+    | Used to deliver admin login codes directly over the Bot API. See
+    | App\Services\Telegram\TelegramBotClient and
+    | App\Http\Controllers\TelegramWebhookController. Distinct from the
+    | public customer bot below — kept separate so a customer typing
+    | "/vincular" by accident can't collide with the admin-linking flow.
     |
     */
     'telegram' => [
         'bot_token' => env('TELEGRAM_ADMIN_BOT_TOKEN'),
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Telegram (customer-facing bot)
+    |--------------------------------------------------------------------------
+    |
+    | Public bot for /mempool, /vip, /escrow and RoboSats P2P alerts — the
+    | full replacement for what used to be the WhatsApp bot. See
+    | App\Http\Controllers\TelegramCustomerWebhookController and
+    | App\Services\Bot\CustomerCommandRouter.
+    |
+    */
+    'telegram_customer_bot' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'webhook_secret' => env('TELEGRAM_BOT_WEBHOOK_SECRET'),
+    ],
+
+    'mempool' => [
+        'api_base_url' => env('MEMPOOL_API_BASE_URL', 'https://mempool.space/api'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | RoboSats (P2P order alerts)
+    |--------------------------------------------------------------------------
+    |
+    | RoboSats is a federated, Tor-first exchange with no single stable
+    | clearnet API (its own docs discourage clearnet access, and known
+    | Tor2Web gateways have gone down before) — so this has no default.
+    | Left unset, App\Console\Commands\PollRoboSatsOrders no-ops with a
+    | logged warning; !mempool/!vip/!escrow are unaffected. Point it at a
+    | coordinator you trust — self-hosted, or reached through a local Tor
+    | SOCKS proxy. See README "Alertas P2P de RoboSats".
+    |
+    */
+    'robosats' => [
+        'api_base_url' => env('ROBOSATS_API_BASE_URL'),
+    ],
+
+    'alerts' => [
+        'free_tier_delay_minutes' => env('FREE_TIER_DELAY_MINUTES', 10),
     ],
 
 ];

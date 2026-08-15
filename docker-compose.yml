@@ -73,17 +73,6 @@ services:
     volumes:
       - redis_data:/data
 
-  whatsapp-bot:
-    build:
-      context: ./whatsapp-bot
-    restart: unless-stopped
-    env_file: ./whatsapp-bot/.env
-    volumes:
-      - whatsapp_auth:/app/auth_sessions
-    depends_on:
-      - redis
-      - web
-
   # Self-hosted LNbits instance used by the escrow service (see
   # web/app/Services/Lightning/LnbitsClient.php) via its core payments
   # API — no extension needed (LNbits has no "hold invoice" extension).
@@ -113,5 +102,4 @@ services:
 volumes:
   db_data:
   redis_data:
-  whatsapp_auth:
   lnbits_data:

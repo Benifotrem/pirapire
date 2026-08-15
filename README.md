@@ -1,36 +1,40 @@
 # Pirapire.pro
 
-Plataforma soberana Bitcoin/Lightning para Paraguay. Incluye bot P2P de alertas RoboSats por WhatsApp, sistema de Escrow para empleos en BTC, utilidades de Mempool y autenticación soberana mediante LNURL-Auth en pirapire.pro.
+Plataforma soberana Bitcoin/Lightning para Paraguay. Incluye alertas P2P de RoboSats y comandos públicos por Telegram, sistema de Escrow para empleos en BTC, utilidades de Mempool y autenticación soberana mediante LNURL-Auth en pirapire.pro.
 
 ## Componentes
 
 | Componente | Stack | Descripción |
 |---|---|---|
-| **`web/`** | Laravel 11 + FilamentPHP v3 | App web (`pirapire.pro`): login LNURL-auth, dashboard de alertas/VIP, panel de administración, API interna para el bot, servicio de escrow Lightning. |
-| **`whatsapp-bot/`** | Node.js 20 + TypeScript | Motor de alertas P2P de RoboSats, comandos públicos de WhatsApp (`!mempool`, `!vip`, `!escrow`). |
+| **`web/`** | Laravel 11 + FilamentPHP v3 | Toda la plataforma: login LNURL-auth, dashboard de alertas/VIP, panel de administración, bots de Telegram (admin y clientes), escrow Lightning, alertas P2P de RoboSats. |
 | **LNbits** | API core de pagos | Wallet custodial de la plataforma para el escrow (no forma parte de este repo; se referencia como servicio de infraestructura). |
 
-Todo corre en un único VPS Ubuntu 24.04 LTS (`179.198.98.224`) vía Docker Compose.
+Todo corre en un único VPS Ubuntu 24.04 LTS vía Docker Compose. No hay un proceso Node.js separado — un intento anterior usaba un bot de WhatsApp no oficial (Baileys) para todo esto, pero WhatsApp desvinculaba la sesión repetidamente (`device_removed`, fallas de sesión cifrada con contactos específicos) sin importar cuánto se peleara con el problema; el rediseño mueve todo a Telegram (API oficial, sin ingeniería inversa) y consolida la lógica en Laravel.
 
 ```
 ┌─────────────┐      LNURL-auth (QR)      ┌──────────────────┐
 │  Billetera  │◄─────────────────────────►│   web (Laravel)   │
 │  Lightning  │                            │  + Filament admin │
 └─────────────┘                            └─────────┬─────────┘
-                                                       │ REST (bearer token)
-┌─────────────┐    RoboSats book (poll)     ┌─────────▼─────────┐
-│  RoboSats   │◄────────────────────────────│  whatsapp-bot      │
-│  P2P API    │                             │  (Baileys, BullMQ) │
+                                                       │
+┌─────────────┐   hold invoice / webhook    ┌─────────▼─────────┐
+│   LNbits    │◄───────────────────────────►│  EscrowService     │
 └─────────────┘                             └─────────┬──────────┘
-                                                       │ WhatsApp Web (multi-device)
+                                                       │
+┌─────────────┐  poll (scheduler, cada 1min) ┌────────▼──────────┐
+│  RoboSats   │◄─────────────────────────────│ PollRoboSatsOrders │
+│  P2P API    │                              │ + queue worker     │
+└─────────────┘                              └────────┬───────────┘
+                                                        │ Bot API (HTTPS)
                                               ┌─────────▼─────────┐
-                                              │   Usuarios WhatsApp │
+                                              │  Bot de Telegram   │
+                                              │  (clientes)        │
                                               └────────────────────┘
 
-┌─────────────┐   hold invoice / webhook    ┌────────────────────┐
-│   LNbits    │◄───────────────────────────►│  web (EscrowService)│
-│ (Hold ext.) │                             └────────────────────┘
-└─────────────┘
+┌────────────────────┐   Bot API (HTTPS)   ┌────────────────────┐
+│  Bot de Telegram    │◄───────────────────►│  web (admin login,  │
+│  (ops/admin)         │                     │  /vincular webhook) │
+└────────────────────┘                      └────────────────────┘
 ```
 
 ## 1. Autenticación soberana: LNURL-Auth
@@ -48,16 +52,18 @@ Flujo (LUD-04):
 
 Sin correo, sin contraseña, sin base de datos de credenciales que filtrar.
 
-## 2. Alertas P2P de RoboSats por WhatsApp
+## 2. Alertas P2P de RoboSats por Telegram
 
-`whatsapp-bot/src/robosats/poller.ts` sondea el order book público de RoboSats (PYG/USD) cada `ROBOSATS_POLL_INTERVAL_SECONDS` (60s por defecto), filtra órdenes nuevas contra las preferencias de alerta de cada usuario (`whatsapp-bot/src/alerts/matcher.ts`) obtenidas de `GET /api/alerts/subscribers` en el backend, y despacha (`whatsapp-bot/src/alerts/dispatcher.ts`):
+`web/app/Console/Commands/PollRoboSatsOrders.php` corre cada minuto (vía el scheduler de Laravel, `routes/console.php`), sondea el order book público de RoboSats (PYG/USD) con `App\Services\RoboSats\RoboSatsClient`, filtra órdenes nuevas contra las alertas activas de cada cliente (`App\Services\RoboSats\AlertMatcher`) y despacha:
 
-- **VIP**: envío instantáneo por WhatsApp.
-- **Gratuito**: encolado en BullMQ/Redis con un retraso de `FREE_TIER_DELAY_MINUTES` (10 min por defecto) antes de enviarse.
+- **VIP**: `App\Jobs\SendRoboSatsAlert` se encola sin retraso.
+- **Gratuito**: el mismo job se encola con un retraso de `FREE_TIER_DELAY_MINUTES` (10 min por defecto) vía `->delay()` — corre en el contenedor `queue` (`php artisan queue:work`), ya levantado por `docker-compose.yml`.
 
-Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, métodos de pago) desde el dashboard web tras autenticarse con LNURL-auth.
+"Nueva orden" se calcula contra un `max-seen-order-id` guardado en caché por moneda (los IDs de RoboSats son monotónicamente crecientes) — en el primer poll de una moneda solo se establece la línea de base, sin alertar por todo el libro de órdenes existente.
 
-**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, el poller queda desactivado (loggea un aviso una vez y no reintenta en loop) sin afectar `!mempool`/`!vip`/`!escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza — lo más fiel al diseño de RoboSats es correrlo contra el `.onion` de un coordinador a través de un proxy Tor SOCKS local (no incluido en este repo todavía).
+Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, métodos de pago) desde el dashboard web tras autenticarse con LNURL-auth, y reciben las alertas en el chat de Telegram vinculado a su cuenta (`customers.telegram_chat_id`, capturado la primera vez que le escriben `/start` al bot).
+
+**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, `robosats:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza — lo más fiel al diseño de RoboSats es correrlo contra el `.onion` de un coordinador a través de un proxy Tor SOCKS local (no incluido en este repo todavía).
 
 ## 3. Escrow Lightning para empleos
 
@@ -82,48 +88,48 @@ created → cancelled (expira sin fondear)
 
 **Implicancia de custodia:** a diferencia de un hold invoice real (donde los fondos quedan en un HTLC hasta liquidarse), acá el wallet de LNbits de la plataforma tiene el saldo real y completo mientras el trabajo está en curso — es un escrow custodial clásico, no un HTLC retenido. Ver la sección de LNbits en "Desarrollo local" para más detalle sobre `FakeWallet` vs. un backend real.
 
-## 4. Comandos de WhatsApp
+## 4. Comandos de Telegram (bot de clientes)
 
 | Comando | Descripción |
 |---|---|
-| `!mempool` | Altura de bloque actual y tarifas recomendadas (mempool.space). |
-| `!vip` | Estado de suscripción VIP del número que escribe. |
-| `!escrow create <monto_sats> <descripción>` | Crea un trabajo de escrow (factura de fondeo vía LNbits). |
-| `!escrow status <id>` | Consulta el estado de un trabajo. |
-| `!escrow release <id> <bolt11>` | Libera los fondos, pagando la factura bolt11 que provee el freelancer. |
-| `!escrow dispute <id>` | Abre una disputa para revisión de un admin. |
-| `!help` | Lista de comandos disponibles. |
+| `/start` | Da de alta al cliente (por `chat_id`) y muestra la bienvenida. |
+| `/mempool` | Altura de bloque actual y tarifas recomendadas (mempool.space). |
+| `/vip` | Estado de suscripción VIP del chat que escribe. |
+| `/escrow create <monto_sats> <descripción>` | Crea un trabajo de escrow (factura de fondeo vía LNbits). |
+| `/escrow status <id>` | Consulta el estado de un trabajo. |
+| `/escrow release <id> <bolt11>` | Libera los fondos, pagando la factura bolt11 que provee el freelancer. |
+| `/escrow dispute <id>` | Abre una disputa para revisión de un admin. |
+| `/help` | Lista de comandos disponibles. |
 
-Implementación: `whatsapp-bot/src/commands/`.
+Implementación: `App\Http\Controllers\TelegramCustomerWebhookController` recibe el webhook (`POST /api/telegram/customer-webhook`) y delega en `App\Services\Bot\CustomerCommandRouter`, que corre como PHP normal dentro del mismo request — sin bot ni cola externa de por medio.
 
-## 5. Healthcheck y recuperación por Telegram
+**Configurar el webhook del bot de clientes (una sola vez, en el VPS):**
 
-`whatsapp-bot/src/telegram/telegramNotifier.ts` mantiene al operador del VPS al tanto del estado de la sesión de WhatsApp (Baileys) sin tener que mirar logs, vía un bot personal de Telegram (`TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`, ambos opcionales — sin ellos el bot funciona igual y solo registra una advertencia).
+```bash
+curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://pirapire.pro/api/telegram/customer-webhook" \
+  -d "secret_token=<TELEGRAM_BOT_WEBHOOK_SECRET>"
+```
 
-Se engancha al listener `connection.update` de Baileys (`whatsapp-bot/src/baileys/connection.ts`):
+Reemplazá `<TELEGRAM_BOT_TOKEN>` y `<TELEGRAM_BOT_WEBHOOK_SECRET>` (sin los `<>`) por los valores de `web/.env`. Este es un bot **distinto** del bot de administración (sección 5) — creá uno nuevo vía [@BotFather](https://t.me/BotFather) para los clientes, para que nunca se mezcle tráfico público con el login de admin.
 
-- **Conexión cerrada o no autorizada** (`closed` / `loggedOut`): alerta urgente inmediata al chat de Telegram.
-- **Nuevo código QR emitido**: se renderiza como imagen PNG (`qrcode`) y se envía directamente como foto al chat, para volver a vincular la sesión sin acceso a la terminal del VPS.
-- **Reconexión exitosa** tras una caída: mensaje `✅ WhatsApp connection restored successfully!`.
-
-## 6. Panel de administración: login con billetera o WhatsApp, wallet y métricas
+## 5. Panel de administración: login con billetera o Telegram, wallet y métricas
 
 Además del login tradicional con usuario/contraseña que trae Filament, `App\Models\User` (staff) puede iniciar sesión de dos formas passwordless, reusando la infraestructura ya construida para los clientes:
 
 - **Billetera Lightning (LNURL-auth)** — `web/app/Http/Controllers/Auth/StaffLnurlAuthController.php`, rutas `/staff-login` y `/staff-lnurl-auth/*`.
-- **WhatsApp (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffWhatsappAuthController.php`, rutas `/staff-login-whatsapp` y `/staff-whatsapp-auth/*`. El código se entrega vía el propio bot de WhatsApp, a través de un endpoint interno del bot (`whatsapp-bot/src/server/internalApi.ts`, `POST /send-message`, nunca publicado al host — solo alcanzable en la red interna de Docker como `http://whatsapp-bot:3001`) que `App\Services\Whatsapp\WhatsappBotClient` llama con un secreto compartido (`WHATSAPP_BOT_INTERNAL_TOKEN`, debe coincidir en `web/.env` y `whatsapp-bot/.env`).
-- **Telegram (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffTelegramAuthController.php`, ruta `/staff-login-telegram` (pedís el código con tu email de admin). A diferencia de WhatsApp, esto habla **directo** con la Bot API de Telegram vía HTTPS (`App\Services\Telegram\TelegramBotClient`) — no depende del bot de Node.js ni de que WhatsApp esté conectado. Usa el mismo `TELEGRAM_ADMIN_BOT_TOKEN` que ya configuraste para las alertas de salud (debe coincidir en `web/.env` y `whatsapp-bot/.env`).
+- **Telegram (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffTelegramAuthController.php`, ruta `/staff-login-telegram` (pedís el código con tu email de admin). Habla **directo** con la Bot API de Telegram vía HTTPS (`App\Services\Telegram\TelegramBotClient`) — sin bot de Node.js ni proceso intermedio de por medio.
 
-**Ninguna de las tres crea cuentas nuevas** (a diferencia del login de clientes): una billetera, número de WhatsApp o chat de Telegram solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular billetera o WhatsApp, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** o **"Vincular WhatsApp 💬"** desde el menú de usuario del panel — ambas rutas reusan la misma vista para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
+**Ninguna de las dos crea cuentas nuevas** (a diferencia del login de clientes): una billetera o un chat de Telegram solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular una billetera, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** desde el menú de usuario del panel — la misma ruta sirve para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
 
 **Vincular Telegram es distinto**, porque un bot de Telegram nunca puede mandarte el primer mensaje — tenés que escribirle vos primero:
 
 1. Iniciá sesión con usuario/contraseña y abrí **"Vincular Telegram 📨"** del menú de usuario. Te muestra un código (`/staff-link-telegram`, `TelegramLinkController`).
-2. Le mandás ese código al bot de Telegram como mensaje: `/vincular CODIGO`.
+2. Le mandás ese código al bot de Telegram (el de administración, distinto del de clientes) como mensaje: `/vincular CODIGO`.
 3. `web/app/Http/Controllers/TelegramWebhookController.php` recibe ese mensaje (Telegram lo empuja vía webhook a `POST /api/telegram/webhook`, autenticado con el header `X-Telegram-Bot-Api-Secret-Token`), asocia tu `chat_id` a tu cuenta y te confirma por Telegram.
 4. La página, que estaba haciendo polling, detecta la confirmación y te redirige al panel.
 
-**Configurar el webhook de Telegram (una sola vez, en el VPS):**
+**Configurar el webhook del bot de administración (una sola vez, en el VPS):**
 
 ```bash
 curl -s "https://api.telegram.org/bot<TELEGRAM_ADMIN_BOT_TOKEN>/setWebhook" \
@@ -138,9 +144,7 @@ El dashboard del panel (`web/app/Filament/Widgets/`) suma:
 - **`LnbitsWalletWidget`**: saldo en vivo del wallet LNbits de la plataforma (`LnbitsClient::getWalletDetails()`, key de solo lectura — la admin key nunca se usa acá), cacheado 30s. Visible solo para rol `admin` (no `support`).
 - **`PlatformStatsWidget`**: sats cobrados en comisión, volumen de escrow, escrows activos, disputas abiertas, VIPs activos y clientes registrados — todo calculado desde la base de datos propia, sin llamadas externas, visible para `admin` y `support`.
 
-Además hay una página dedicada, **`App\Filament\Pages\WhatsappConnection`** (ítem "WhatsApp" en el menú, solo rol `admin`), que muestra el QR de vinculación o el estado de conexión en vivo, actualizándose sola cada 5s (`wire:poll`) — así podés re-vincular WhatsApp desde el navegador sin necesitar SSH ni depender de que Telegram esté funcionando. El bot empuja su estado (`qr`/`connected`/`disconnected`) a `POST /api/whatsapp/status` en cada evento `connection.update` de Baileys (`whatsapp-bot/src/baileys/connection.ts`), autenticado con el mismo `WHATSAPP_BOT_API_TOKEN` que usa para el resto de `routes/api.php`; Laravel lo cachea (`Cache::forever`) y la página lo lee.
-
-## 7. Frontend
+## 6. Frontend
 
 `pirapire.pro` usa Tailwind CSS (ya configurado con Vite) con una estética inspirada en RoboSats: fondos claros (`bg-white` / `bg-slate-50`), acentos en azul eléctrico (`bg-blue-600`) y gradientes azul→púrpura (`from-blue-600 via-indigo-600 to-purple-600`) en tarjetas/banners, y fuente monoespaciada (`font-mono`) para montos en sats, el texto del LNURL y los códigos de contrato de escrow (`#ESC-XXXXXXXX`, ver `EscrowJob::contractCode()`).
 
@@ -158,27 +162,27 @@ cd web && npm install && npm run build   # compila Tailwind/Vite (public/build/m
 
 ```
 pirapire/
-├── web/                  # Laravel 11 + FilamentPHP v3
-│   ├── app/Services/Lnurl/       # LNURL-auth (Bech32, verificación de firma)
-│   ├── app/Services/Lightning/   # Cliente LNbits (hold invoices)
-│   ├── app/Services/Escrow/      # Máquina de estados del escrow
-│   ├── app/Filament/Resources/   # Panel de administración
-│   ├── app/Http/Controllers/Api/ # API consumida por el bot de WhatsApp
-│   └── routes/{web,api}.php
-├── whatsapp-bot/          # Bot de WhatsApp (Baileys) en TypeScript
-│   ├── src/robosats/      # Cliente y poller del order book P2P
-│   ├── src/alerts/        # Matching y despacho (instantáneo/retrasado)
-│   ├── src/commands/      # !mempool, !vip, !escrow
-│   └── src/queue/         # Cola BullMQ para alertas del plan gratuito
+├── web/                            # Laravel 11 + FilamentPHP v3 (toda la plataforma)
+│   ├── app/Services/Lnurl/         # LNURL-auth (Bech32, verificación de firma)
+│   ├── app/Services/Lightning/     # Cliente LNbits
+│   ├── app/Services/Escrow/        # Máquina de estados del escrow
+│   ├── app/Services/Telegram/      # Clientes de las dos Bot API (admin y clientes)
+│   ├── app/Services/RoboSats/      # Cliente del order book + matching de alertas
+│   ├── app/Services/Mempool/       # Cliente de mempool.space
+│   ├── app/Services/Bot/           # Router de comandos del bot de clientes
+│   ├── app/Console/Commands/       # robosats:poll (scheduler)
+│   ├── app/Jobs/                   # SendRoboSatsAlert (cola, con delay para el plan gratuito)
+│   ├── app/Filament/Resources/     # Panel de administración
+│   ├── app/Http/Controllers/       # Webhooks de Telegram (admin y clientes), escrow
+│   └── routes/{web,api,console}.php
 ├── docker/                # Configuración de nginx
 ├── docker-compose.yml
-└── .github/workflows/     # CI (Laravel, bot) y despliegue por SSH
+└── .github/workflows/     # CI (Laravel) y despliegue por SSH
 ```
 
 ## Desarrollo local
 
 ```bash
-# 1. Backend Laravel
 cd web
 cp .env.example .env
 composer install
@@ -187,12 +191,8 @@ php artisan key:generate
 php artisan migrate
 npm run dev &        # Vite dev server (Tailwind hot-reload)
 php artisan serve
-
-# 2. Bot de WhatsApp
-cd whatsapp-bot
-cp .env.example .env   # completar PIRAPIRE_API_TOKEN, etc.
-npm install
-npm run dev             # escanea el QR que imprime en consola para vincular WhatsApp
+php artisan schedule:work &   # corre robosats:poll y la limpieza de escrows expirados
+php artisan queue:work        # procesa las alertas de RoboSats encoladas
 ```
 
 O con Docker Compose (recomendado para un entorno completo, incluyendo Postgres, Redis y una instancia de LNbits local con `FakeWallet` para pruebas):
@@ -200,18 +200,16 @@ O con Docker Compose (recomendado para un entorno completo, incluyendo Postgres,
 ```bash
 cp .env.example .env                       # variables que usa docker-compose.yml (DB_PASSWORD, etc.)
 cp web/.env.example web/.env
-cp whatsapp-bot/.env.example whatsapp-bot/.env
 (cd web && npm install && npm run build)   # nginx serves public/ straight off the host
 docker compose up --build
 ```
 
-Son **tres** archivos `.env` distintos, cada uno con un rol distinto — ninguno sustituye a los otros:
+Son **dos** archivos `.env` distintos, cada uno con un rol distinto:
 
 | Archivo | Para qué |
 |---|---|
 | `.env` (raíz) | Lo lee `docker compose` para las sustituciones `${VAR}` de `docker-compose.yml` (arranque del contenedor de Postgres, backend de LNbits). |
-| `web/.env` | Configuración de la app Laravel, inyectada al contenedor vía `env_file:`. |
-| `whatsapp-bot/.env` | Configuración del bot de WhatsApp. |
+| `web/.env` | Configuración de la app Laravel, inyectada a todos los contenedores (`web`, `queue`, `scheduler`) vía `env_file:`. |
 
 `DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` tienen que ser **iguales** en `.env` (raíz) y en `web/.env`: el primero crea las credenciales del contenedor de Postgres, el segundo es lo que usa Laravel para conectarse a esa misma base.
 
@@ -221,26 +219,24 @@ Son **tres** archivos `.env` distintos, cada uno con un rol distinto — ninguno
 
 ```bash
 cd web && php artisan test          # requiere ext-gmp o ext-bcmath (verificación LNURL-auth)
-cd whatsapp-bot && npm test
 ```
 
 ## Variables de entorno clave
 
-Ver `web/.env.example` y `whatsapp-bot/.env.example`. Destacadas:
+Ver `web/.env.example`. Destacadas:
 
-- `WHATSAPP_BOT_API_TOKEN` / `PIRAPIRE_API_TOKEN`: mismo secreto compartido entre el backend y el bot (autentica `routes/api.php`).
-- `LNBITS_ADMIN_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia las hold invoices.
+- `LNBITS_ADMIN_KEY`, `LNBITS_INVOICE_READ_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia el escrow.
 - `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
+- `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET`: bot privado de administración — login admin por código y el handshake `/vincular` (sección 5).
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
+- `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
+- `ROBOSATS_API_BASE_URL`: coordinador de RoboSats a sondear (sin valor por defecto — ver sección 2).
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
-- `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_ADMIN_CHAT_ID`: bot y chat de Telegram para las alertas de salud/QR de la sesión de WhatsApp (opcional).
-- `WHATSAPP_BOT_INTERNAL_TOKEN` / `WHATSAPP_BOT_INTERNAL_PORT`: secreto y puerto del endpoint interno con el que Laravel le pide al bot que mande un mensaje de WhatsApp (login admin por código). Debe ser el **mismo token** en `web/.env` (`WHATSAPP_BOT_INTERNAL_TOKEN`) y en `whatsapp-bot/.env`.
-- `TELEGRAM_ADMIN_BOT_TOKEN` (en `web/.env`, además de en `whatsapp-bot/.env` — mismo valor): usado por `TelegramBotClient` para mandar códigos de login directo por HTTPS. `TELEGRAM_WEBHOOK_SECRET`: valida que las actualizaciones a `POST /api/telegram/webhook` vengan realmente de Telegram (ver sección 6, "Configurar el webhook de Telegram").
 
 ## CI/CD
 
 - `.github/workflows/laravel-ci.yml`: Pint (estilo), migraciones sobre SQLite, `php artisan test`.
-- `.github/workflows/whatsapp-bot-ci.yml`: ESLint, `tsc --noEmit`, build, `vitest`.
-- `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push. También requiere que los tres `.env` (raíz, `web/`, `whatsapp-bot/`, ver tabla arriba) ya existan en `/opt/pirapire` en el VPS **antes** del primer deploy — como están en `.gitignore`, `git reset --hard` nunca los toca, pero tampoco los crea; si falta alguno el workflow corta antes de construir las imágenes y te dice cuál.
+- `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push. También requiere que los dos `.env` (raíz y `web/`, ver tabla arriba) ya existan en `/opt/pirapire` en el VPS **antes** del primer deploy — como están en `.gitignore`, `git reset --hard` nunca los toca, pero tampoco los crea; si falta alguno el workflow corta antes de construir las imágenes y te dice cuál.
 
 ## HTTPS con Cloudflare (Full Strict)
 

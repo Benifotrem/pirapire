@@ -22,7 +22,7 @@ class VipSubscriptionResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('customer_id')
-                ->relationship('customer', 'whatsapp_number')
+                ->relationship('customer', 'telegram_chat_id')
                 ->searchable()
                 ->required(),
             Forms\Components\Select::make('status')
@@ -39,7 +39,7 @@ class VipSubscriptionResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('customer.whatsapp_number')->label('WhatsApp')->placeholder('—'),
+                Tables\Columns\TextColumn::make('customer.telegram_chat_id')->label('Telegram')->placeholder('—'),
                 Tables\Columns\TextColumn::make('status')->badge(),
                 Tables\Columns\TextColumn::make('amount_sats')->label('Sats'),
                 Tables\Columns\TextColumn::make('starts_at')->dateTime(),

@@ -22,7 +22,7 @@ class AlertResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('customer_id')
-                ->relationship('customer', 'whatsapp_number')
+                ->relationship('customer', 'telegram_chat_id')
                 ->searchable()
                 ->required(),
             Forms\Components\Select::make('currency')
@@ -42,7 +42,7 @@ class AlertResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('customer.whatsapp_number')->label('WhatsApp')->placeholder('—'),
+                Tables\Columns\TextColumn::make('customer.telegram_chat_id')->label('Telegram')->placeholder('—'),
                 Tables\Columns\TextColumn::make('currency'),
                 Tables\Columns\TextColumn::make('order_type'),
                 Tables\Columns\TextColumn::make('min_amount')->placeholder('—'),

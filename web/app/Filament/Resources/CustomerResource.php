@@ -26,7 +26,7 @@ class CustomerResource extends Resource
                 ->disabled()
                 ->dehydrated(false),
             Forms\Components\TextInput::make('display_name')->maxLength(255),
-            Forms\Components\TextInput::make('whatsapp_number')->maxLength(32),
+            Forms\Components\TextInput::make('telegram_chat_id')->maxLength(32),
         ]);
     }
 
@@ -36,7 +36,7 @@ class CustomerResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('id')->sortable(),
                 Tables\Columns\TextColumn::make('display_name')->placeholder('—')->searchable(),
-                Tables\Columns\TextColumn::make('whatsapp_number')->placeholder('—')->searchable(),
+                Tables\Columns\TextColumn::make('telegram_chat_id')->label('Telegram')->placeholder('—')->searchable(),
                 Tables\Columns\TextColumn::make('linking_key')
                     ->label('Clave')
                     ->formatStateUsing(fn (?string $state) => $state ? substr($state, 0, 12).'…' : '—'),

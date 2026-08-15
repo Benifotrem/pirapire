@@ -24,7 +24,7 @@
                 Pirapire.pro — Notificaciones P2P y Escrow Soberano para Paraguay
             </h1>
             <p class="mx-auto mt-6 max-w-2xl text-lg text-white/80">
-                Alertas instantáneas de órdenes P2P de RoboSats, trabajos con Escrow Lightning y herramientas de Mempool — todo por WhatsApp, con un login sin correo ni contraseña.
+                Alertas instantáneas de órdenes P2P de RoboSats, trabajos con Escrow Lightning y herramientas de Mempool — todo por Telegram, con un login sin correo ni contraseña.
             </p>
 
             <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -43,7 +43,7 @@
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div class="mx-auto max-w-2xl text-center">
                 <h2 class="text-3xl font-bold text-slate-900">Todo lo que necesitás, en un solo bot</h2>
-                <p class="mt-4 text-slate-500">Tres herramientas soberanas, sin custodia, directo en tu WhatsApp.</p>
+                <p class="mt-4 text-slate-500">Tres herramientas soberanas, sin custodia, directo en tu Telegram.</p>
             </div>
 
             <div class="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
@@ -51,7 +51,7 @@
                     image="/images/p2p-alerts.webp"
                     gradient="from-blue-500 to-indigo-600"
                     title="Alertas P2P de RoboSats"
-                    description="Recibí en WhatsApp cada orden de compra/venta P2P en PYG o USD que coincida con tus preferencias. Instantáneo para VIP, 10 minutos de retraso en el plan gratuito."
+                    description="Recibí en Telegram cada orden de compra/venta P2P en PYG o USD que coincida con tus preferencias. Instantáneo para VIP, 10 minutos de retraso en el plan gratuito."
                 >
                     <path d="M12 2 2 7l10 5 10-5-10-5Z" />
                     <path d="M2 17l10 5 10-5" />
@@ -72,7 +72,7 @@
                     image="/images/mempool-tools.webp"
                     gradient="from-purple-500 to-blue-600"
                     title="Mempool & VIP"
-                    description="Consultá la altura de bloque y las tarifas recomendadas al instante con !mempool, y gestioná tu suscripción VIP con !vip."
+                    description="Consultá la altura de bloque y las tarifas recomendadas al instante con /mempool, y gestioná tu suscripción VIP con /vip."
                 >
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7v5l3 3" />
