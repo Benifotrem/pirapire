@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/** Reports current Bitcoin mainnet block height and fee estimates for the `/mempool` command. */
+/** Reports current Bitcoin mainnet block height and fee estimates for `/mempool` and the customer Mini App. */
 class MempoolClient
 {
     private readonly string $baseUrl;
@@ -18,6 +18,26 @@ class MempoolClient
 
     public function summary(): string
     {
+        $stats = $this->stats();
+
+        if ($stats === null) {
+            return '⚠️ No se pudo consultar mempool.space en este momento. Intenta de nuevo en unos minutos.';
+        }
+
+        return implode("\n", [
+            '⛓️ *Estado de la Mempool (Bitcoin mainnet)*',
+            "Altura de bloque: {$stats['height']}",
+            'Tarifas recomendadas (sat/vB):',
+            "  🚀 Próximo bloque: {$stats['fees']['fastestFee']}",
+            "  ⏱️ ~30 min: {$stats['fees']['halfHourFee']}",
+            "  🕐 ~1 hora: {$stats['fees']['hourFee']}",
+            "  🐢 Económica: {$stats['fees']['economyFee']}",
+        ]);
+    }
+
+    /** @return array{height: int, fees: array<string, int>}|null */
+    public function stats(): ?array
+    {
         try {
             $height = Http::timeout(10)->get("{$this->baseUrl}/blocks/tip/height");
             $fees = Http::timeout(10)->get("{$this->baseUrl}/v1/fees/recommended");
@@ -26,21 +46,14 @@ class MempoolClient
                 throw new \RuntimeException('mempool.space returned a non-2xx response.');
             }
 
-            $feeData = $fees->json();
-
-            return implode("\n", [
-                '⛓️ *Estado de la Mempool (Bitcoin mainnet)*',
-                "Altura de bloque: {$height->body()}",
-                'Tarifas recomendadas (sat/vB):',
-                "  🚀 Próximo bloque: {$feeData['fastestFee']}",
-                "  ⏱️ ~30 min: {$feeData['halfHourFee']}",
-                "  🕐 ~1 hora: {$feeData['hourFee']}",
-                "  🐢 Económica: {$feeData['economyFee']}",
-            ]);
+            return [
+                'height' => (int) $height->body(),
+                'fees' => $fees->json(),
+            ];
         } catch (Throwable $e) {
-            Log::error('mempool command failed', ['err' => $e->getMessage()]);
+            Log::error('mempool stats fetch failed', ['err' => $e->getMessage()]);
 
-            return '⚠️ No se pudo consultar mempool.space en este momento. Intenta de nuevo en unos minutos.';
+            return null;
         }
     }
 }

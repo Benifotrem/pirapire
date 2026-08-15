@@ -2,13 +2,9 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Customer;
-use App\Models\EscrowDispute;
-use App\Models\EscrowJob;
-use App\Models\VipSubscription;
+use App\Services\Stats\PlatformStatsService;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Business metrics for the admin dashboard. Every number here is derived
@@ -21,17 +17,7 @@ class PlatformStatsWidget extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        // Cached briefly: these are dashboard vanity metrics, not
-        // operational data that needs to be second-fresh, and the escrow
-        // fee/volume sums scan the whole completed-jobs table.
-        $stats = Cache::remember('admin-dashboard:platform-stats', 30, fn () => [
-            'fee_sats' => (int) EscrowJob::where('status', 'completed')->sum('fee_sats'),
-            'volume_sats' => (int) EscrowJob::where('status', 'completed')->sum('amount_sats'),
-            'active_jobs' => EscrowJob::whereIn('status', ['created', 'funded', 'in_progress', 'disputed'])->count(),
-            'open_disputes' => EscrowDispute::where('status', 'open')->count(),
-            'active_vips' => VipSubscription::where('status', 'active')->where('expires_at', '>', now())->count(),
-            'customers' => Customer::count(),
-        ]);
+        $stats = app(PlatformStatsService::class)->compute();
 
         return [
             Stat::make('Sats cobrados en comisión', number_format($stats['fee_sats']))

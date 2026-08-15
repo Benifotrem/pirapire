@@ -11,6 +11,14 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+// Telegram Mini Apps — static shells opened from a "Web App" button inside
+// each bot. No server-side auth here (there's no Laravel session inside
+// Telegram's webview); the page authenticates its own API calls with
+// Telegram's signed initData once Telegram.WebApp is ready client-side —
+// see routes/api.php's miniapp.customer/miniapp.admin groups.
+Route::get('/miniapp/customer', fn () => view('miniapp.customer'))->name('miniapp.customer');
+Route::get('/miniapp/admin', fn () => view('miniapp.admin'))->name('miniapp.admin');
+
 // LNURL-auth passwordless login (LUD-04). See app/Services/Lnurl/LnurlAuthService.php.
 Route::middleware('guest:customer')->group(function () {
     Route::get('/login', [LnurlAuthController::class, 'show'])->name('login');

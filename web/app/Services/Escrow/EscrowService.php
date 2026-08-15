@@ -97,13 +97,15 @@ class EscrowService
                 'payout_destination' => $payoutBolt11,
             ]);
 
-            if ($job->status === 'disputed') {
-                $job->disputes()->where('status', 'open')->update([
-                    'status' => 'resolved',
-                    'resolution' => 'released_to_freelancer',
-                    'resolved_at' => now(),
-                ]);
-            }
+            // No-op via the `where('status', 'open')` clause when the job
+            // wasn't disputed — matches refund()'s unconditional pattern.
+            // (Checking $job->status here, after the update() above already
+            // overwrote it to 'completed', would always be false.)
+            $job->disputes()->where('status', 'open')->update([
+                'status' => 'resolved',
+                'resolution' => 'released_to_freelancer',
+                'resolved_at' => now(),
+            ]);
         });
     }
 

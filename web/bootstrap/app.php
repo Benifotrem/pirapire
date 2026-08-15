@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\AuthenticateAdminMiniApp;
+use App\Http\Middleware\AuthenticateCustomerMiniApp;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'miniapp.customer' => AuthenticateCustomerMiniApp::class,
+            'miniapp.admin' => AuthenticateAdminMiniApp::class,
+        ]);
+
         // nginx (the `web` container's only client) sits behind Cloudflare;
         // trust it as the immediate proxy so Laravel reads the real client
         // IP/scheme from Cloudflare's X-Forwarded-* headers instead of

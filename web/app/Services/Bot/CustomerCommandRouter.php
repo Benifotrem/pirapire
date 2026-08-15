@@ -59,7 +59,7 @@ class CustomerCommandRouter
         return implode("\n", [
             '⚡ *Bienvenido a Pirapire*',
             '',
-            'Comandos disponibles: /mempool, /vip, /escrow, /help',
+            'Tocá el botón ☰ junto al mensaje para abrir la app completa (alertas, escrow y mempool con botones) — o usá los comandos: /mempool, /vip, /escrow, /help',
         ]);
     }
 
@@ -70,6 +70,8 @@ class CustomerCommandRouter
             '/mempool — altura de bloque y tarifas actuales',
             '/vip — tu estado de suscripción VIP',
             '/escrow — gestión de trabajos con escrow Lightning',
+            '',
+            'Tip: el botón ☰ junto al mensaje abre la app completa, con formularios en vez de comandos.',
         ]);
     }
 

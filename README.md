@@ -1,6 +1,6 @@
 # Pirapire.pro
 
-Plataforma soberana Bitcoin/Lightning para Paraguay. Incluye alertas P2P de RoboSats y comandos públicos por Telegram, sistema de Escrow para empleos en BTC, utilidades de Mempool y autenticación soberana mediante LNURL-Auth en pirapire.pro.
+Plataforma soberana Bitcoin/Lightning para Paraguay. Incluye alertas P2P de RoboSats y dos bots de Telegram (comandos + Mini App) — uno público para clientes, otro privado para administración —, sistema de Escrow para empleos en BTC, utilidades de Mempool y autenticación soberana mediante LNURL-Auth en pirapire.pro.
 
 ## Componentes
 
@@ -113,6 +113,20 @@ curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 
 Reemplazá `<TELEGRAM_BOT_TOKEN>` y `<TELEGRAM_BOT_WEBHOOK_SECRET>` (sin los `<>`) por los valores de `web/.env`. Este es un bot **distinto** del bot de administración (sección 5) — creá uno nuevo vía [@BotFather](https://t.me/BotFather) para los clientes, para que nunca se mezcle tráfico público con el login de admin.
 
+### Mini App de clientes
+
+Además de los comandos de texto, el bot expone una **Telegram Mini App** — una página web (`resources/views/miniapp/customer.blade.php`) que se abre dentro del chat tocando el botón ☰ junto al mensaje, con las mismas acciones pero en formularios en vez de comandos: estado VIP, alta/pausa/borrado de alertas P2P, listado y detalle de contratos de escrow (crear, liberar, disputar) y el estado de la mempool.
+
+No hay sesión ni cookie de Laravel — Telegram firma un payload (`Telegram.WebApp.initData`) con el token del bot cada vez que se abre la Mini App, y el frontend lo manda en cada `fetch()` vía el header `X-Telegram-Init-Data`. `App\Http\Middleware\AuthenticateCustomerMiniApp` verifica esa firma (`App\Services\Telegram\WebAppAuth`, HMAC-SHA256 según el esquema documentado por Telegram) contra `TELEGRAM_BOT_TOKEN` y resuelve/crea el `Customer` por el mismo `telegram_chat_id` que usa el webhook — comandos y Mini App comparten datos, no son sistemas separados. La API JSON detrás de la Mini App vive en `routes/api.php` bajo `/api/miniapp/customer/*`, y llama a los mismos `EscrowService`/`MempoolClient`/modelos que usa `CustomerCommandRouter`.
+
+**Activar el botón de menú de la Mini App (una sola vez, en el VPS):**
+
+```bash
+curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setChatMenuButton" \
+  -H "Content-Type: application/json" \
+  -d '{"menu_button": {"type": "web_app", "text": "Abrir App", "web_app": {"url": "https://pirapire.pro/miniapp/customer"}}}'
+```
+
 ## 5. Panel de administración: login con billetera o Telegram, wallet y métricas
 
 Además del login tradicional con usuario/contraseña que trae Filament, `App\Models\User` (staff) puede iniciar sesión de dos formas passwordless, reusando la infraestructura ya construida para los clientes:
@@ -144,6 +158,22 @@ El dashboard del panel (`web/app/Filament/Widgets/`) suma:
 - **`LnbitsWalletWidget`**: saldo en vivo del wallet LNbits de la plataforma (`LnbitsClient::getWalletDetails()`, key de solo lectura — la admin key nunca se usa acá), cacheado 30s. Visible solo para rol `admin` (no `support`).
 - **`PlatformStatsWidget`**: sats cobrados en comisión, volumen de escrow, escrows activos, disputas abiertas, VIPs activos y clientes registrados — todo calculado desde la base de datos propia, sin llamadas externas, visible para `admin` y `support`.
 
+Ambos widgets leen de `App\Services\Stats\PlatformStatsService`, compartido con la Mini App de abajo para que las dos superficies nunca muestren números distintos.
+
+### Mini App de administración
+
+El bot de administración también tiene su propia Mini App (`resources/views/miniapp/admin.blade.php`) — una versión resumida y mobile-first del panel de Filament, pensada para lo que de verdad necesitás resolver desde el celular: el saldo del wallet y las métricas del dashboard, el listado de trabajos de escrow (con filtro por estado) y, sobre todo, **resolver disputas** (liberar o reembolsar) sin tener que abrir una laptop. La gestión completa de clientes, alertas, VIPs y staff sigue siendo exclusiva de Filament.
+
+Misma autenticación que la Mini App de clientes pero contra el bot de **administración**: `App\Http\Middleware\AuthenticateAdminMiniApp` valida el `initData` contra `TELEGRAM_ADMIN_BOT_TOKEN` y busca un `User` ya vinculado por `telegram_chat_id` — **no crea cuentas**, igual que el login por OTP. Si tu chat no está vinculado (ver "Vincular Telegram" arriba), la Mini App te lo dice en vez de fallar en silencio. El wallet solo lo ve el rol `admin` (igual que `LnbitsWalletWidget`); el resto es visible para `admin` y `support`. API JSON en `routes/api.php` bajo `/api/miniapp/admin/*`.
+
+**Activar el botón de menú de la Mini App de administración (una sola vez, en el VPS):**
+
+```bash
+curl -s "https://api.telegram.org/bot<TELEGRAM_ADMIN_BOT_TOKEN>/setChatMenuButton" \
+  -H "Content-Type: application/json" \
+  -d '{"menu_button": {"type": "web_app", "text": "Panel Admin", "web_app": {"url": "https://pirapire.pro/miniapp/admin"}}}'
+```
+
 ## 6. Frontend
 
 `pirapire.pro` usa Tailwind CSS (ya configurado con Vite) con una estética inspirada en RoboSats: fondos claros (`bg-white` / `bg-slate-50`), acentos en azul eléctrico (`bg-blue-600`) y gradientes azul→púrpura (`from-blue-600 via-indigo-600 to-purple-600`) en tarjetas/banners, y fuente monoespaciada (`font-mono`) para montos en sats, el texto del LNURL y los códigos de contrato de escrow (`#ESC-XXXXXXXX`, ver `EscrowJob::contractCode()`).
@@ -170,10 +200,14 @@ pirapire/
 │   ├── app/Services/RoboSats/      # Cliente del order book + matching de alertas
 │   ├── app/Services/Mempool/       # Cliente de mempool.space
 │   ├── app/Services/Bot/           # Router de comandos del bot de clientes
+│   ├── app/Services/Stats/         # Métricas compartidas por Filament y la Mini App admin
 │   ├── app/Console/Commands/       # robosats:poll (scheduler)
 │   ├── app/Jobs/                   # SendRoboSatsAlert (cola, con delay para el plan gratuito)
 │   ├── app/Filament/Resources/     # Panel de administración
 │   ├── app/Http/Controllers/       # Webhooks de Telegram (admin y clientes), escrow
+│   ├── app/Http/Controllers/MiniApp/  # API JSON detrás de las dos Mini Apps
+│   ├── app/Http/Middleware/        # Auth de Mini App (valida initData de Telegram)
+│   ├── resources/views/miniapp/    # Las dos Mini Apps (clientes y admin)
 │   └── routes/{web,api,console}.php
 ├── docker/                # Configuración de nginx
 ├── docker-compose.yml
