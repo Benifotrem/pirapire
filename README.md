@@ -129,12 +129,14 @@ curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setChatMenuButton" \
 
 ## 5. Panel de administración: login con billetera o Telegram, wallet y métricas
 
-Además del login tradicional con usuario/contraseña que trae Filament, `App\Models\User` (staff) puede iniciar sesión de dos formas passwordless, reusando la infraestructura ya construida para los clientes:
+**Un solo punto de entrada:** `/admin/login` (`App\Filament\Pages\Auth\Login`, que sobreescribe la página de login de Filament — ver `resources/views/filament/pages/auth/login.blade.php`) muestra **Telegram** y **billetera Lightning** como los dos botones principales. El login tradicional de usuario/contraseña que trae Filament de fábrica sigue existiendo pero queda escondido detrás de un desplegable colapsado ("Acceso de emergencia con usuario y contraseña"), pensado solo como respaldo si por algún motivo las otras dos vías no están disponibles — no se eliminó porque sigue siendo la única forma de entrar la primerísima vez, antes de vincular nada.
+
+Los dos métodos passwordless reusan la infraestructura ya construida para los clientes:
 
 - **Billetera Lightning (LNURL-auth)** — `web/app/Http/Controllers/Auth/StaffLnurlAuthController.php`, rutas `/staff-login` y `/staff-lnurl-auth/*`.
 - **Telegram (código de un solo uso)** — `web/app/Http/Controllers/Auth/StaffTelegramAuthController.php`, ruta `/staff-login-telegram` (pedís el código con tu email de admin). Habla **directo** con la Bot API de Telegram vía HTTPS (`App\Services\Telegram\TelegramBotClient`) — sin bot de Node.js ni proceso intermedio de por medio.
 
-**Ninguna de las dos crea cuentas nuevas** (a diferencia del login de clientes): una billetera o un chat de Telegram solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular una billetera, iniciá sesión con usuario/contraseña y abrí **"Vincular billetera Lightning ⚡"** desde el menú de usuario del panel — la misma ruta sirve para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
+**Ninguna de las dos crea cuentas nuevas** (a diferencia del login de clientes): una billetera o un chat de Telegram solo funciona si ya está vinculado a un `User` existente con rol `admin`/`support`. Para vincular una billetera, iniciá sesión (por cualquiera de las tres vías) y abrí **"Vincular billetera Lightning ⚡"** desde el menú de usuario del panel — la misma ruta sirve para "vincular" (cuando ya estás logueado) o "iniciar sesión" (cuando sos invitado), decidido en el controlador según `Auth::guard('web')->check()`.
 
 **Vincular Telegram es distinto**, porque un bot de Telegram nunca puede mandarte el primer mensaje — tenés que escribirle vos primero:
 

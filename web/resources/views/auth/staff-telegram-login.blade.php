@@ -36,7 +36,7 @@
             </form>
 
             <a href="/admin/login" class="mt-6 block text-xs text-slate-500 hover:text-slate-300">
-                &larr; Volver al login con usuario y contraseña
+                &larr; Volver a las opciones de acceso
             </a>
         </div>
     </div>

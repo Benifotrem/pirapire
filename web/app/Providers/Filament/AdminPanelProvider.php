@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\Login;
 use App\Filament\Widgets\LnbitsWalletWidget;
 use App\Filament\Widgets\PlatformStatsWidget;
 use Filament\Http\Middleware\Authenticate;
@@ -31,7 +32,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->brandName('Pirapire Admin')
             ->favicon(asset('images/favicon.png'))
-            ->login()
+            ->login(Login::class)
             ->colors([
                 'primary' => Color::Amber,
             ])
