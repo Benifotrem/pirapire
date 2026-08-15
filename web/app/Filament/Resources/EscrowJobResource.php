@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use RuntimeException;
 
 class EscrowJobResource extends Resource
 {
@@ -99,6 +100,8 @@ class EscrowJobResource extends Resource
             Notification::make()->title('Escrow actualizado')->success()->send();
         } catch (DomainException $e) {
             Notification::make()->title('Error')->body($e->getMessage())->danger()->send();
+        } catch (RuntimeException) {
+            Notification::make()->title('Error')->body('No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.')->danger()->send();
         }
     }
 

@@ -15,9 +15,16 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        User::query()->firstOrCreate(
+            ['email' => 'test@example.com'],
+            User::factory()->raw(['name' => 'Test User']),
+        );
+
+        // Demo data for local development — see each seeder's docblock.
+        // Idempotent (firstOrCreate throughout), safe to re-run.
+        $this->call([
+            LedAdSeeder::class,
+            VipDemoSeeder::class,
         ]);
     }
 }

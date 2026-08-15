@@ -63,7 +63,20 @@ Sin correo, sin contraseña, sin base de datos de credenciales que filtrar.
 
 Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, métodos de pago) desde el dashboard web tras autenticarse con LNURL-auth, y reciben las alertas en el chat de Telegram vinculado a su cuenta (`customers.telegram_chat_id`, capturado la primera vez que le escriben `/start` al bot).
 
-**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, `robosats:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza — lo más fiel al diseño de RoboSats es correrlo contra el `.onion` de un coordinador a través de un proxy Tor SOCKS local (no incluido en este repo todavía).
+**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, `robosats:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza.
+
+### Configuración de RoboSats (Tor / proxy)
+
+Lo más fiel al diseño de RoboSats es apuntar `ROBOSATS_API_BASE_URL` al `.onion` de un coordinador de confianza, a través de un proxy SOCKS5 local — `docker-compose.yml` incluye un servicio `tor` (`dperson/torproxy`) listo para esto:
+
+```bash
+ROBOSATS_API_BASE_URL=http://<coordinador>.onion
+ROBOSATS_PROXY_URL=socks5h://tor:9050   # "tor" es el hostname del servicio en docker-compose.yml
+```
+
+(La `h` de `socks5h` le dice a cURL que resuelva el hostname *a través* del proxy — imprescindible para `.onion`, que no es resoluble por DNS normal. Para un coordinador clearnet, dejá `ROBOSATS_PROXY_URL` vacío y no hace falta el proxy.)
+
+`App\Services\RoboSats\RoboSatsClient::fetchBook()` ya envuelve toda la llamada HTTP (proxy incluido) en un `try/catch` que nunca deja escapar la excepción: si Tor está caído o el proxy no responde, el método loggea el error y devuelve un array vacío. `PollRoboSatsOrders` trata eso igual que "no hay órdenes nuevas" y sigue — nunca falla el comando ni afecta a `/mempool`, `/vip`, `/escrow` ni a las otras entradas del scheduler (`vip-subscriptions:expire`, `escrow-jobs:cancel-expired`), que corren de forma independiente. Cobertura: `tests/Unit/RoboSatsClientTest.php` y `tests/Feature/PollRoboSatsOrdersTest.php`.
 
 ## 3. Escrow Lightning para empleos
 
@@ -256,6 +269,7 @@ composer install
 npm install
 php artisan key:generate
 php artisan migrate
+php artisan db:seed  # opcional: datos de prueba — ver "Datos de prueba" más abajo
 npm run dev &        # Vite dev server (Tailwind hot-reload)
 php artisan serve
 php artisan schedule:work &   # corre robosats:poll y la limpieza de escrows expirados
@@ -282,6 +296,13 @@ Son **dos** archivos `.env` distintos, cada uno con un rol distinto:
 
 `FakeWallet` no mueve sats reales — es el funding source por defecto, pensado para probar el flujo completo (crear escrow, pagar, liberar) sin arriesgar plata. Las claves de API se consiguen igual que con un backend real: entrá a `http://<tu-VPS>:5000`, dejá que LNbits te cree wallet en el primer acceso, y copiá el **Admin key** y el **Invoice/read key** desde "API docs" en la página del wallet. Antes de producción, cambiá `LNBITS_BACKEND_WALLET_CLASS` a un backend real (`LndRestWallet`, `CoreLightningWallet`, etc.) apuntando a tu propio nodo Lightning — ahí sí las claves y los sats son reales. No hace falta ninguna extensión: el escrow usa la API core de pagos de LNbits (ver sección 3).
 
+### Datos de prueba
+
+`php artisan db:seed` (idempotente, se puede correr las veces que quieras) carga:
+
+- **`LedAdSeeder`**: 4 anuncios del cartel LED con temática Bitcoin-Paraguay (3 activos, 1 inactivo a propósito, para ejercitar el filtro de `LedDisplayComposer`), más 2 `LedAdSubmission` en estado `pending` para probar la cola de moderación (**Solicitudes de comercios** en Filament) sin pasar por el formulario público `/anunciar`. También asegura que exista la fila de `LedDisplaySetting` (cartel encendido, color rojo).
+- **`VipDemoSeeder`**: tres `Customer` de ejemplo — uno VIP activo (con una alerta P2P), uno VIP vencido, y uno en plan gratuito (con una alerta) — para que el panel admin y sus métricas (`PlatformStatsWidget`) tengan algo que mostrar sin pagar una factura real.
+
 ### Tests
 
 ```bash
@@ -297,7 +318,7 @@ Ver `web/.env.example`. Destacadas:
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET`: bot privado de administración — login admin por código y el handshake `/vincular` (sección 5).
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
-- `ROBOSATS_API_BASE_URL`: coordinador de RoboSats a sondear (sin valor por defecto — ver sección 2).
+- `ROBOSATS_API_BASE_URL` / `ROBOSATS_PROXY_URL`: coordinador de RoboSats a sondear y, opcionalmente, el proxy SOCKS5/Tor para llegar a un `.onion` (sin valor por defecto — ver sección 2, "Configuración de RoboSats (Tor / proxy)").
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
 
 ## CI/CD

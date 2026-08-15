@@ -7,6 +7,7 @@ use App\Models\Alert;
 use App\Models\Customer;
 use App\Models\VipSubscription;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -101,6 +102,25 @@ class PollRoboSatsOrdersTest extends TestCase
         Queue::assertPushed(SendRoboSatsAlert::class, function (SendRoboSatsAlert $job) {
             return $job->delay !== null;
         });
+    }
+
+    public function test_a_connectivity_failure_such_as_tor_being_down_does_not_fail_the_command(): void
+    {
+        config(['services.robosats.api_base_url' => 'http://robosats.test', 'services.robosats.proxy_url' => 'socks5h://tor:9050']);
+        Http::fake(function () {
+            throw new ConnectionException('cURL error 7: Failed to connect to tor port 9050: Connection refused');
+        });
+
+        Queue::fake();
+
+        // robosats:poll must exit successfully even when Tor/the proxy is
+        // unreachable — a non-zero exit here would show up as a failed
+        // scheduled task, but must never take other Schedule entries
+        // (vip-subscriptions:expire, escrow-jobs:cancel-expired) down with
+        // it, since each runs as its own isolated process.
+        $this->artisan('robosats:poll')->assertSuccessful();
+
+        Queue::assertNothingPushed();
     }
 
     public function test_does_not_alert_subscribers_without_telegram_linked(): void

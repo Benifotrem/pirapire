@@ -109,6 +109,14 @@ return [
     */
     'robosats' => [
         'api_base_url' => env('ROBOSATS_API_BASE_URL'),
+        // Optional SOCKS5/Tor proxy for reaching a .onion RoboSats
+        // endpoint — e.g. socks5h://tor:9050 (the "tor" service in
+        // docker-compose.yml) or socks5h://127.0.0.1:9050 for a local
+        // Tor daemon outside Docker. The "h" in socks5h tells cURL to
+        // resolve the hostname *through* the proxy, which .onion
+        // addresses require (they aren't resolvable via normal DNS).
+        // Leave unset to hit a clearnet URL directly, with no proxy.
+        'proxy_url' => env('ROBOSATS_PROXY_URL'),
     ],
 
     'alerts' => [

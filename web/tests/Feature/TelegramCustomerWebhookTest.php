@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Customer;
 use App\Models\EscrowJob;
+use App\Services\Bot\CustomerCommandRouter;
 use App\Services\Lightning\LnbitsClient;
 use App\Services\Telegram\CustomerTelegramBotClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 class TelegramCustomerWebhookTest extends TestCase
@@ -133,6 +135,81 @@ class TelegramCustomerWebhookTest extends TestCase
             ->assertOk();
 
         $this->assertSame('completed', $job->fresh()->status);
+    }
+
+    public function test_missing_message_entirely_is_ignored_without_error(): void
+    {
+        $this->mock(CustomerTelegramBotClient::class, fn ($mock) => $mock->shouldNotReceive('sendMessage'));
+
+        $this->postJson('/api/telegram/customer-webhook', ['update_id' => 1], [
+            'X-Telegram-Bot-Api-Secret-Token' => 'customer-secret',
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', 'ignored');
+
+        $this->assertDatabaseCount('customers', 0);
+    }
+
+    public function test_chat_id_present_but_text_missing_is_ignored(): void
+    {
+        $this->mock(CustomerTelegramBotClient::class, fn ($mock) => $mock->shouldNotReceive('sendMessage'));
+
+        $this->postJson('/api/telegram/customer-webhook', ['message' => ['chat' => ['id' => 555111]]], [
+            'X-Telegram-Bot-Api-Secret-Token' => 'customer-secret',
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', 'ignored');
+    }
+
+    public function test_escrow_create_replies_gracefully_when_lnbits_is_unreachable(): void
+    {
+        $this->mock(LnbitsClient::class, function ($mock) {
+            $mock->shouldReceive('createInvoice')->once()->andThrow(new RuntimeException('Failed to create invoice via LNbits.'));
+        });
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'no está disponible')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/escrow create 5000 Traducción de documento'])
+            ->assertOk()
+            ->assertJsonPath('status', 'replied');
+
+        $this->assertDatabaseCount('escrow_jobs', 0);
+    }
+
+    public function test_escrow_release_replies_gracefully_when_lnbits_is_unreachable(): void
+    {
+        $customer = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $customer->id, 'status' => 'funded']);
+
+        $this->mock(LnbitsClient::class, function ($mock) {
+            $mock->shouldReceive('payInvoice')->once()->andThrow(new RuntimeException('Failed to pay invoice via LNbits.'));
+        });
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'no está disponible')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => "/escrow release {$job->id} lnbc1payout"])
+            ->assertOk();
+
+        $this->assertSame('funded', $job->fresh()->status);
+    }
+
+    public function test_unexpected_router_failure_never_returns_a_500(): void
+    {
+        $this->mock(CustomerCommandRouter::class, function ($mock) {
+            $mock->shouldReceive('route')->once()->andThrow(new RuntimeException('boom', 0));
+        });
+
+        // A RuntimeException from the router itself (as opposed to one already
+        // caught and translated inside it) still must not surface as a 500 —
+        // it's swallowed by the same catch as a failed sendMessage() call.
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/mempool'])
+            ->assertOk();
     }
 
     public function test_escrow_dispute_opens_a_dispute(): void

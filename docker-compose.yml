@@ -69,6 +69,7 @@ services:
     depends_on:
       - db
       - redis
+      - tor
 
   db:
     image: postgres:16-alpine
@@ -111,6 +112,19 @@ services:
       - lnbits_data:/app/data
     ports:
       - "5000:5000"
+
+  # Local SOCKS5 proxy into the Tor network, for reaching RoboSats when its
+  # only reliable endpoint is a .onion address (many community/official
+  # instances are Tor-only, or rate-limit clearnet mirrors more
+  # aggressively). Optional: robosats:poll works over clearnet with no
+  # proxy at all if ROBOSATS_PROXY_URL is left unset — see
+  # App\Services\RoboSats\RoboSatsClient and README "Configuración de
+  # RoboSats (Tor / proxy)". Cheap enough to leave running even when unused.
+  tor:
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+    ports:
+      - "9050:9050"
 
 volumes:
   db_data:

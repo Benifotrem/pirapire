@@ -13,6 +13,7 @@ use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -130,6 +131,8 @@ class AdminController extends Controller
             ]);
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (RuntimeException) {
+            return response()->json(['message' => 'No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.'], 503);
         }
 
         return response()->json($dispute->fresh(['escrowJob', 'openedBy']));

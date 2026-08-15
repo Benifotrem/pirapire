@@ -8,6 +8,7 @@ use App\Models\EscrowJob;
 use App\Services\Lightning\LnbitsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 class CustomerMiniAppTest extends TestCase
@@ -133,6 +134,19 @@ class CustomerMiniAppTest extends TestCase
             ->assertJsonCount(1);
     }
 
+    public function test_create_escrow_job_returns_a_service_unavailable_error_when_lnbits_is_down(): void
+    {
+        $this->mock(LnbitsClient::class, fn ($mock) => $mock->shouldReceive('createInvoice')
+            ->once()->andThrow(new RuntimeException('Failed to create invoice via LNbits.')));
+
+        $this->miniAppPost('/api/miniapp/customer/escrow-jobs', [
+            'amount_sats' => 5000,
+            'description' => 'Traducción de documento',
+        ])->assertStatus(503);
+
+        $this->assertDatabaseCount('escrow_jobs', 0);
+    }
+
     public function test_customer_cannot_view_another_customers_escrow_job(): void
     {
         $owner = Customer::factory()->create(['telegram_chat_id' => '999999']);
@@ -151,6 +165,20 @@ class CustomerMiniAppTest extends TestCase
         $this->miniAppPost("/api/miniapp/customer/escrow-jobs/{$job->id}/release", ['payout_bolt11' => 'lnbc1payout'])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
+    }
+
+    public function test_release_returns_a_service_unavailable_error_when_lnbits_is_down(): void
+    {
+        $customer = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $customer->id, 'status' => 'funded']);
+
+        $this->mock(LnbitsClient::class, fn ($mock) => $mock->shouldReceive('payInvoice')
+            ->once()->andThrow(new RuntimeException('Failed to pay invoice via LNbits.')));
+
+        $this->miniAppPost("/api/miniapp/customer/escrow-jobs/{$job->id}/release", ['payout_bolt11' => 'lnbc1payout'])
+            ->assertStatus(503);
+
+        $this->assertSame('funded', $job->fresh()->status);
     }
 
     public function test_dispute_opens_a_dispute(): void

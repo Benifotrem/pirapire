@@ -13,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
+use RuntimeException;
 
 class EscrowDisputeResource extends Resource
 {
@@ -98,6 +99,8 @@ class EscrowDisputeResource extends Resource
             Notification::make()->title('Disputa resuelta')->success()->send();
         } catch (DomainException $e) {
             Notification::make()->title('Error')->body($e->getMessage())->danger()->send();
+        } catch (RuntimeException) {
+            Notification::make()->title('Error')->body('No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.')->danger()->send();
         }
     }
 

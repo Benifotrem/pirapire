@@ -7,6 +7,7 @@ use App\Models\EscrowJob;
 use App\Services\Escrow\EscrowService;
 use App\Services\Mempool\MempoolClient;
 use DomainException;
+use RuntimeException;
 
 /**
  * Parses an incoming Telegram message from a customer and, if it's a
@@ -26,6 +27,8 @@ class CustomerCommandRouter
         /escrow release <id> <factura_bolt11> — libera los fondos a la factura del freelancer
         /escrow dispute <id> — abre una disputa para que un admin resuelva
         TEXT;
+
+    private const LNBITS_DOWN_MESSAGE = '⚠️ El proveedor de pagos no está disponible en este momento. Probá de nuevo en unos minutos.';
 
     public function __construct(
         private readonly EscrowService $escrow,
@@ -134,6 +137,8 @@ class CustomerCommandRouter
             $job = $this->escrow->createJob($customer, $amountSats, $description);
         } catch (DomainException $e) {
             return "⚠️ {$e->getMessage()}";
+        } catch (RuntimeException) {
+            return self::LNBITS_DOWN_MESSAGE;
         }
 
         return implode("\n", [
@@ -186,6 +191,8 @@ class CustomerCommandRouter
             $this->escrow->release($job, $payoutBolt11);
         } catch (DomainException) {
             return "⚠️ No se pudo liberar el escrow {$jobId}. Verificá que la factura sea válida y no haya expirado.";
+        } catch (RuntimeException) {
+            return self::LNBITS_DOWN_MESSAGE;
         }
 
         return "✅ Fondos del escrow {$jobId} liberados.";

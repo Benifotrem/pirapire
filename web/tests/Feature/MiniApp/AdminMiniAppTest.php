@@ -8,6 +8,7 @@ use App\Models\EscrowJob;
 use App\Models\User;
 use App\Services\Lightning\LnbitsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 class AdminMiniAppTest extends TestCase
@@ -112,6 +113,29 @@ class AdminMiniAppTest extends TestCase
 
         $this->assertSame('completed', $job->fresh()->status);
         $this->assertSame($admin->id, $dispute->fresh()->resolved_by_user_id);
+    }
+
+    public function test_resolve_dispute_returns_a_service_unavailable_error_when_lnbits_is_down(): void
+    {
+        $admin = User::factory()->create(['telegram_chat_id' => '42', 'role' => 'admin']);
+        $customer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $customer->id, 'status' => 'disputed']);
+        $dispute = EscrowDispute::factory()->create([
+            'escrow_job_id' => $job->id,
+            'opened_by_customer_id' => $customer->id,
+            'status' => 'open',
+        ]);
+
+        $this->mock(LnbitsClient::class, fn ($mock) => $mock->shouldReceive('payInvoice')
+            ->once()->andThrow(new RuntimeException('Failed to pay invoice via LNbits.')));
+
+        $this->as($admin, 'POST', "/api/miniapp/admin/disputes/{$dispute->id}/resolve", [
+            'action' => 'release',
+            'payout_bolt11' => 'lnbc1payout',
+        ])->assertStatus(503);
+
+        $this->assertSame('disputed', $job->fresh()->status);
+        $this->assertSame('open', $dispute->fresh()->status);
     }
 
     public function test_show_dispute_returns_a_single_dispute_even_beyond_the_list_limit(): void

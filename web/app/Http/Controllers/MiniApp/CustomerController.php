@@ -11,6 +11,7 @@ use App\Services\Mempool\MempoolClient;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 /**
  * JSON API behind the customer Mini App (resources/views/miniapp/customer.blade.php).
@@ -124,6 +125,8 @@ class CustomerController extends Controller
             $job = $this->escrow->createJob($this->customer($request), $validated['amount_sats'], $validated['description']);
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (RuntimeException) {
+            return response()->json(['message' => 'No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.'], 503);
         }
 
         return response()->json($job, 201);
@@ -139,6 +142,8 @@ class CustomerController extends Controller
             $this->escrow->release($job, $validated['payout_bolt11']);
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (RuntimeException) {
+            return response()->json(['message' => 'No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.'], 503);
         }
 
         return response()->json($job->fresh());
