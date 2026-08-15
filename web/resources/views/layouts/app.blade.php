@@ -13,9 +13,8 @@
     <div class="flex min-h-screen flex-col">
         <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-                <a href="{{ route('home') }}" class="flex items-center gap-2 text-lg font-bold text-slate-900">
-                    <img src="{{ asset('images/favicon.png') }}" alt="" class="h-8 w-8 rounded-lg object-contain">
-                    Pirapire<span class="text-blue-600">.pro</span>
+                <a href="{{ route('home') }}" class="flex items-center">
+                    <img src="{{ asset('images/logo.png') }}" alt="Pirapire.pro" class="h-12 w-auto object-contain">
                 </a>
 
                 <nav class="flex items-center gap-3">
