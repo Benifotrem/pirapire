@@ -88,6 +88,8 @@ created → cancelled (expira sin fondear)
 
 **Implicancia de custodia:** a diferencia de un hold invoice real (donde los fondos quedan en un HTLC hasta liquidarse), acá el wallet de LNbits de la plataforma tiene el saldo real y completo mientras el trabajo está en curso — es un escrow custodial clásico, no un HTLC retenido. Ver la sección de LNbits en "Desarrollo local" para más detalle sobre `FakeWallet` vs. un backend real.
 
+**Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `created → funded → in_progress → completed` y `created → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`.
+
 ## 4. Comandos de Telegram (bot de clientes)
 
 | Comando | Descripción |
@@ -112,6 +114,15 @@ curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 ```
 
 Reemplazá `<TELEGRAM_BOT_TOKEN>` y `<TELEGRAM_BOT_WEBHOOK_SECRET>` (sin los `<>`) por los valores de `web/.env`. Este es un bot **distinto** del bot de administración (sección 5) — creá uno nuevo vía [@BotFather](https://t.me/BotFather) para los clientes, para que nunca se mezcle tráfico público con el login de admin.
+
+**Verificar que quedó bien registrado**, sin tener que pegar el token a mano (lo toma directo de `web/.env`):
+
+```bash
+source <(grep -E '^TELEGRAM_BOT_TOKEN=' web/.env)
+curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+```
+
+La respuesta debe tener `"url":"https://pirapire.pro/api/telegram/customer-webhook"` y `"pending_update_count":0`. Si `"url"` aparece vacío, el `setWebhook` de arriba no se corrió (o se corrió con un token distinto al que quedó en `.env`); si `"last_error_message"` trae algo, ese es el motivo por el que Telegram no puede entregar los updates (típicamente un secret_token que no coincide con `TELEGRAM_BOT_WEBHOOK_SECRET`, o el contenedor `web` caído).
 
 ### Mini App de clientes
 

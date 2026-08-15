@@ -2,8 +2,8 @@
 
 return [
 
-    'outside_title' => 'Open this from the Telegram bot',
-    'outside_body' => 'This page needs to run inside Telegram to identify you.',
+    'outside_title' => 'Open this from BØLT on Telegram',
+    'outside_body' => 'This page needs to run inside BØLT to identify you.',
     'error_generic' => 'Connection error',
     'loading' => 'Loading…',
 
