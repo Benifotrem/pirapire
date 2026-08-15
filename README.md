@@ -355,6 +355,31 @@ COMPOSE_PROFILES=production   # activa el servicio cloudflared en todo comando d
 
 **Desarrollo local no usa nada de esto** — no hace falta token ni túnel. `docker-compose.local.yml` publica nginx y LNbits directo en `localhost` (ver "Desarrollo local" más arriba), y el servicio `cloudflared` ni se levanta (queda detrás del profile `production`, que un `docker compose up` normal no activa).
 
+### Diagnosticar "Error 1033: Cloudflare Tunnel error"
+
+Si `https://pirapire.pro` devuelve esta página en vez del sitio, seguí este orden — cubre las dos causas reales que ya nos pasaron montando esto:
+
+1. **Confirmá que el problema no es interno.** Desde el VPS:
+   ```bash
+   docker run --rm --network pirapire_default curlimages/curl -sv http://nginx:80/ | tail -20
+   ```
+   Si esto devuelve `200 OK` con el HTML del sitio, `nginx` y todo lo que está detrás andan perfectos — el problema es 100% de configuración en el lado de Cloudflare, seguí con los pasos de abajo. Si falla acá, el problema es de Docker/nginx, no de Cloudflare (revisá `docker compose ps` y `docker compose logs nginx`).
+
+2. **El error más común: el CNAME del DNS apunta al ID equivocado.** `cloudflared` loguea dos UUIDs parecidos que **no son intercambiables**:
+   ```
+   Starting tunnel tunnelID=b7cbc67d-0b70-4ae5-acb3-2f190d850485    ← este es el que va en el CNAME
+   Generated Connector ID: d1655e92-1baa-4b84-a4a7-8d00ee9a64c1     ← este NO — cambia en cada reinicio
+   ```
+   Si en algún momento escribiste el CNAME a mano (en vez de dejar que el flujo "Add a route" → "Published application" del túnel lo gestione solo), es fácil confundirlos y pegar el Connector ID por error. En **DNS → Records**, el `Content` del `CNAME` de `pirapire.pro` tiene que ser `<tunnelID>.cfargotunnel.com` — comparalo contra el `tunnelID` real de `docker compose logs cloudflared`. Ojo también: si ya existía un registro con ese nombre, el "DNS se configura automático" del flujo de rutas **no lo pisa solo** — hay que corregirlo a mano vía **Edit**.
+
+3. **`cloudflared` no siempre recarga rutas nuevas en caliente.** Si agregaste o cambiaste un "Public Hostname" mientras el contenedor ya estaba corriendo, reinicialo para forzar que traiga la config nueva:
+   ```bash
+   docker compose restart cloudflared
+   docker compose logs cloudflared --tail 20   # buscá la línea "Updated to new configuration"
+   ```
+
+4. Con eso resuelto, `curl -sv https://pirapire.pro/ 2>&1 | tail -15` debería mostrar el HTML del sitio en vez de `error code: 1033`.
+
 ## Licencia
 
 MIT — ver [`LICENSE`](./LICENSE).
