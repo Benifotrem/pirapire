@@ -70,6 +70,7 @@ class CustomerController extends Controller
     {
         $validated = $request->validate([
             'currency' => 'required|in:PYG,USD',
+            'source' => 'nullable|in:robosats,mostro,all',
             'order_type' => 'required|in:BUY,SELL,ANY',
             'min_amount' => 'nullable|integer|min:0',
             'max_amount' => 'nullable|integer|gte:min_amount',

@@ -13,6 +13,7 @@ class Alert extends Model
     protected $fillable = [
         'customer_id',
         'currency',
+        'source',
         'order_type',
         'min_amount',
         'max_amount',

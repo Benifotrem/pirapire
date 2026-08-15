@@ -27,6 +27,7 @@ Schedule::call(function () {
 
 // Replaces the old Node bot's RoboSatsPoller (node-cron on an arbitrary
 // interval, default 60s) — Laravel's scheduler tops out at per-minute
-// granularity, close enough to that default. No-ops with a warning if
-// ROBOSATS_API_BASE_URL is unset (see App\Console\Commands\PollRoboSatsOrders).
-Schedule::command('robosats:poll')->everyMinute()->name('robosats:poll')->withoutOverlapping();
+// granularity, close enough to that default. Polls every configured P2P
+// source (RoboSats, Mostro); no-ops with a warning if none are (see
+// App\Console\Commands\PollP2POffers).
+Schedule::command('p2p:poll')->everyMinute()->name('p2p:poll')->withoutOverlapping();

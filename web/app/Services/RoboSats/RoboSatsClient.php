@@ -57,10 +57,10 @@ class RoboSatsClient
             return is_array($data) && array_is_list($data) ? $data : [];
         } catch (Throwable $e) {
             // Covers a Tor/proxy outage the same as any other connectivity
-            // failure: robosats:poll (App\Console\Commands\PollRoboSatsOrders)
-            // treats an empty book as "nothing new" and moves on, so this
-            // never interrupts the scheduler or unrelated commands
-            // (/mempool, /escrow) — see that command's class docblock.
+            // failure: App\Services\P2P\Drivers\RoboSatsDriver /
+            // App\Console\Commands\PollP2POffers treat an empty book as
+            // "nothing new" and move on, so this never interrupts the
+            // scheduler or unrelated commands (/mempool, /escrow).
             Log::error('Failed to fetch RoboSats order book', ['err' => $e->getMessage()]);
 
             return [];

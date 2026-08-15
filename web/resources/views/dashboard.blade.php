@@ -41,6 +41,14 @@
                     </select>
                 </div>
                 <div>
+                    <label for="source" class="block text-xs font-medium text-slate-500">{{ __('site.dashboard.source') }}</label>
+                    <select name="source" id="source" class="mt-1 w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="all">{{ __('site.dashboard.source_all') }}</option>
+                        <option value="robosats">{{ __('site.dashboard.source_robosats') }}</option>
+                        <option value="mostro">{{ __('site.dashboard.source_mostro') }}</option>
+                    </select>
+                </div>
+                <div>
                     <label for="order_type" class="block text-xs font-medium text-slate-500">{{ __('site.dashboard.order_type') }}</label>
                     <select name="order_type" id="order_type" class="mt-1 w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500">
                         <option value="ANY">{{ __('site.dashboard.order_type_any') }}</option>
@@ -71,6 +79,9 @@
                         <div>
                             <p class="text-sm text-slate-700">
                                 <span class="font-semibold">{{ $alert->currency }}</span> · {{ $alert->order_type }}
+                                @if ($alert->source !== 'all')
+                                    · {{ __('site.dashboard.source_'.$alert->source) }}
+                                @endif
                                 @if ($alert->min_amount || $alert->max_amount)
                                     · <span class="font-mono">{{ $alert->min_amount ?? '0' }}–{{ $alert->max_amount ?? '∞' }}</span>
                                 @endif

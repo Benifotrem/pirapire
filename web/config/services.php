@@ -119,6 +119,31 @@ return [
         'proxy_url' => env('ROBOSATS_PROXY_URL'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Mostro (P2P Lightning exchange over Nostr)
+    |--------------------------------------------------------------------------
+    |
+    | Mostro has no HTTP API — orders live as replaceable Nostr events
+    | (kind 38383, per Mostro's own NIP) published to public relays. See
+    | App\Services\Nostr\NostrRelayClient for the client and
+    | App\Services\P2P\Drivers\MostroDriver for how the tags on those
+    | events get parsed into App\DTOs\NormalizedP2POffer. Left unset (no
+    | relays configured), MostroDriver returns no offers and
+    | App\Services\P2P\P2POfferAggregator simply skips it — RoboSats
+    | keeps working on its own either way.
+    |
+    */
+    'mostro' => [
+        'relays' => array_filter(explode(',', (string) env('MOSTRO_RELAYS', ''))),
+        // The Mostro instance's own Nostr pubkey (hex), so we only parse
+        // orders it actually published — required once relays are set,
+        // otherwise any kind-38383 event on those relays would be treated
+        // as a Mostro order.
+        'pubkey' => env('MOSTRO_PUBKEY'),
+        'relay_timeout_seconds' => (int) env('MOSTRO_RELAY_TIMEOUT_SECONDS', 8),
+    ],
+
     'alerts' => [
         'free_tier_delay_minutes' => env('FREE_TIER_DELAY_MINUTES', 10),
     ],

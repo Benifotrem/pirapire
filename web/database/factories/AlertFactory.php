@@ -21,6 +21,7 @@ class AlertFactory extends Factory
         return [
             'customer_id' => Customer::factory(),
             'currency' => fake()->randomElement(['PYG', 'USD']),
+            'source' => 'all',
             'order_type' => fake()->randomElement(['BUY', 'SELL', 'ANY']),
             'min_amount' => null,
             'max_amount' => null,

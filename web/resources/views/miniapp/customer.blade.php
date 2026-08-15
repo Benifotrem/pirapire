@@ -92,6 +92,14 @@
                     </select>
                 </div>
                 <div>
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_source') }}</label>
+                    <select name="source" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
+                        <option value="all">{{ __('miniapp.alerts_source_all') }}</option>
+                        <option value="robosats">{{ __('miniapp.alerts_source_robosats') }}</option>
+                        <option value="mostro">{{ __('miniapp.alerts_source_mostro') }}</option>
+                    </select>
+                </div>
+                <div>
                     <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_order_type') }}</label>
                     <select name="order_type" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
                         <option value="ANY">{{ __('miniapp.alerts_any') }}</option>
@@ -249,7 +257,7 @@
                 row.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="font-semibold">${a.currency} · ${a.order_type}</p>
+                            <p class="font-semibold">${a.currency} · ${a.order_type}${a.source && a.source !== 'all' ? ' · ' + t('alerts_source_' + a.source) : ''}</p>
                             <p class="pp-hint text-xs font-mono">${a.min_amount ?? '0'}–${a.max_amount ?? '∞'}</p>
                             <span class="text-xs ${a.is_active ? 'text-emerald-600' : 'pp-hint'}">${a.is_active ? t('alerts_active') : t('alerts_paused')}</span>
                         </div>
@@ -280,6 +288,7 @@
                 const data = Object.fromEntries(new FormData(form).entries());
                 const payload = {
                     currency: data.currency,
+                    source: data.source,
                     order_type: data.order_type,
                     min_amount: data.min_amount || null,
                     max_amount: data.max_amount || null,

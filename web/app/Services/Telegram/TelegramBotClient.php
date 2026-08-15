@@ -26,16 +26,25 @@ class TelegramBotClient
         $this->token = $token ?? config('services.telegram.bot_token');
     }
 
-    public function sendMessage(string $chatId, string $text): void
+    /**
+     * $parseMode is opt-in (null by default) rather than always-on so
+     * existing plain-text callers aren't suddenly subject to Telegram's
+     * Markdown escaping rules for characters like `_`, `*`, `[` — pass
+     * 'Markdown' explicitly (as App\Jobs\SendP2POfferAlert does) when the
+     * message actually uses Markdown syntax (links, code blocks, bold).
+     */
+    public function sendMessage(string $chatId, string $text, ?string $parseMode = null): void
     {
         if (! $this->token) {
             throw new RuntimeException('TELEGRAM_ADMIN_BOT_TOKEN is not configured.');
         }
 
-        $response = Http::timeout(10)->post(self::API_BASE."/bot{$this->token}/sendMessage", [
-            'chat_id' => $chatId,
-            'text' => $text,
-        ]);
+        $payload = ['chat_id' => $chatId, 'text' => $text];
+        if ($parseMode !== null) {
+            $payload['parse_mode'] = $parseMode;
+        }
+
+        $response = Http::timeout(10)->post(self::API_BASE."/bot{$this->token}/sendMessage", $payload);
 
         if ($response->failed()) {
             Log::error('Telegram sendMessage failed', ['chat_id' => $chatId, 'body' => $response->body()]);

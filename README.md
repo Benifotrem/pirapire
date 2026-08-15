@@ -22,8 +22,8 @@ Todo corre en un único VPS Ubuntu 24.04 LTS vía Docker Compose. No hay un proc
 └─────────────┘                             └─────────┬──────────┘
                                                        │
 ┌─────────────┐  poll (scheduler, cada 1min) ┌────────▼──────────┐
-│  RoboSats   │◄─────────────────────────────│ PollRoboSatsOrders │
-│  P2P API    │                              │ + queue worker     │
+│ RoboSats +  │◄─────────────────────────────│   PollP2POffers    │
+│ Mostro (P2P)│    (P2POfferAggregator)      │ + queue worker     │
 └─────────────┘                              └────────┬───────────┘
                                                         │ Bot API (HTTPS)
                                               ┌─────────▼─────────┐
@@ -52,18 +52,26 @@ Flujo (LUD-04):
 
 Sin correo, sin contraseña, sin base de datos de credenciales que filtrar.
 
-## 2. Alertas P2P de RoboSats por Telegram
+## 2. Alertas P2P de RoboSats y Mostro por Telegram
 
-`web/app/Console/Commands/PollRoboSatsOrders.php` corre cada minuto (vía el scheduler de Laravel, `routes/console.php`), sondea el order book público de RoboSats (PYG/USD) con `App\Services\RoboSats\RoboSatsClient`, filtra órdenes nuevas contra las alertas activas de cada cliente (`App\Services\RoboSats\AlertMatcher`) y despacha:
+Las alertas P2P siguen un patrón adaptador: cualquier fuente de ofertas (RoboSats, Mostro, o una futura) implementa `App\Contracts\P2PProviderInterface` (`getProviderName()`, `fetchOffers()`, `formatOfferUrl()`) y devuelve `App\DTOs\NormalizedP2POffer` — un objeto con la misma forma sin importar de dónde vino la oferta (ID, tipo de orden, monto fiat, moneda, sats estimados, método de pago, reputación si aplica, enlace directo y comando de acción). El resto del sistema (matching, formato del mensaje, el comando del scheduler) trabaja solo contra ese DTO, nunca contra la API específica de cada fuente.
 
-- **VIP**: `App\Jobs\SendRoboSatsAlert` se encola sin retraso.
-- **Gratuito**: el mismo job se encola con un retraso de `FREE_TIER_DELAY_MINUTES` (10 min por defecto) vía `->delay()` — corre en el contenedor `queue` (`php artisan queue:work`), ya levantado por `docker-compose.yml`.
+- **`App\Services\P2P\Drivers\RoboSatsDriver`** envuelve `App\Services\RoboSats\RoboSatsClient` (HTTP contra el order book público) y calcula los sats estimados a partir del precio de la orden.
+- **`App\Services\P2P\Drivers\MostroDriver`** lee órdenes de [Mostro](https://mostro.network) — que no tiene API HTTP propia, las órdenes son eventos Nostr (kind `38383`, replaceable, publicados por la clave del propio Mostro) — vía `App\Services\Nostr\NostrRelayClient`, un cliente WebSocket mínimo (handshake y framing RFC 6455 implementados directo sobre streams de PHP, sin dependencia externa) que abre un relay, pide un filtro NIP-01 y junta los eventos hasta `EOSE`. El armado del DTO parsea las tags publicadas por Mostro (`k` tipo de orden, `f` moneda, `fa` monto fiat, `amt` sats, `pm` método de pago, `expiration`) de forma defensiva — un evento mal formado se descarta, nunca rompe el poll.
+- **`App\Services\P2P\P2POfferAggregator`** (bindeado como singleton en `AppServiceProvider` con ambos drivers) recorre las fuentes activas y junta sus ofertas. Si una fuente falla — un relay de Nostr caído, Tor sin responder — el agregador captura la excepción, la loggea y sigue con las demás; nunca deja que una fuente caída tumbe a las otras. `MostroDriver` además es resiliente **entre relays propios**: si uno de los configurados en `MOSTRO_RELAYS` no responde, prueba igual con el resto antes de que el agregador entre en juego.
 
-"Nueva orden" se calcula contra un `max-seen-order-id` guardado en caché por moneda (los IDs de RoboSats son monotónicamente crecientes) — en el primer poll de una moneda solo se establece la línea de base, sin alertar por todo el libro de órdenes existente.
+`web/app/Console/Commands/PollP2POffers.php` (`p2p:poll`) corre cada minuto (vía el scheduler de Laravel, `routes/console.php`), le pide al agregador el book de PYG y USD, filtra ofertas nuevas contra las alertas activas de cada cliente (`App\Services\P2P\AlertMatcher` — moneda, tipo de orden, rango de monto, métodos de pago, y la fuente elegida) y despacha `App\Jobs\SendP2POfferAlert`:
 
-Los usuarios gestionan sus alertas (moneda, tipo de orden, rango de monto, métodos de pago) desde el dashboard web tras autenticarse con LNURL-auth, y reciben las alertas en el chat de Telegram vinculado a su cuenta (`customers.telegram_chat_id`, capturado la primera vez que le escriben `/start` al bot).
+- **VIP**: se encola sin retraso.
+- **Gratuito**: se encola con un retraso de `FREE_TIER_DELAY_MINUTES` (10 min por defecto) vía `->delay()` — corre en el contenedor `queue` (`php artisan queue:work`), ya levantado por `docker-compose.yml`.
 
-**Sobre `ROBOSATS_API_BASE_URL`:** RoboSats es un exchange federado y Tor-first — no existe una única API clearnet estable a la que apuntar por defecto (la documentación oficial desaconseja explícitamente el acceso clearnet, y gateways Tor2Web conocidos como `unsafe.robosats.org` dejaron de funcionar en el pasado). Por eso esta variable **no tiene valor por defecto**: sin configurar, `robosats:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`, que no dependen de RoboSats. Para activarlo, apuntá a un coordinador de confianza.
+El mensaje de Telegram (`App\Services\P2P\P2PMessageFormatter`) se manda con `parse_mode: Markdown` (`App\Services\Telegram\TelegramBotClient::sendMessage()` acepta un tercer parámetro opcional para esto) e incluye tipo de oferta, la etiqueta de origen (`🤖 [RoboSats]` / `👾 [Mostro]`), monto en fiat, sats estimados, método de pago y vencimiento si aplica; para Mostro, además un link directo (vía [njump.me](https://njump.me), el visor público de eventos Nostr — Mostro no tiene una página web de detalle de orden propia) y un bloque de código monoespaciado copiable con el comando `mostro-cli takebuy -o <ID>` / `takesell` según corresponda.
+
+"Nueva oferta" se calcula contra un set de IDs ya vistos guardado en caché por fuente+moneda (`p2p:seen-offer-ids:{source}:{currency}`) — a diferencia del viejo `max-seen-order-id` (que asumía IDs numéricos monotónicamente crecientes, cierto para RoboSats pero no para los hashes de eventos Nostr de Mostro), esto funciona para cualquier tipo de ID. En el primer poll de una fuente+moneda solo se establece la línea de base, sin alertar por todo el book existente.
+
+Los usuarios gestionan sus alertas (moneda, **fuente preferida** — RoboSats, Mostro o todas —, tipo de orden, rango de monto, métodos de pago) desde el dashboard web o la Mini App tras autenticarse, y reciben las alertas en el chat de Telegram vinculado a su cuenta (`customers.telegram_chat_id`, capturado la primera vez que le escriben `/start` al bot). La columna `alerts.source` (`robosats` | `mostro` | `all`, por defecto `all`) es lo que filtra esto.
+
+**Sobre `ROBOSATS_API_BASE_URL` y `MOSTRO_RELAYS`:** ninguna de las dos tiene valor por defecto — RoboSats es un exchange federado y Tor-first sin una única API clearnet estable (la documentación oficial desaconseja el acceso clearnet, y gateways Tor2Web como `unsafe.robosats.org` dejaron de funcionar en el pasado), y Mostro no tiene ningún servidor central, solo relays de Nostr. Con las dos sin configurar, `p2p:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`. Cualquiera de las dos alcanza para que el comando tenga algo que sondear — no hace falta configurar ambas.
 
 ### Configuración de RoboSats (Tor / proxy)
 
@@ -76,7 +84,17 @@ ROBOSATS_PROXY_URL=socks5h://tor:9050   # "tor" es el hostname del servicio en d
 
 (La `h` de `socks5h` le dice a cURL que resuelva el hostname *a través* del proxy — imprescindible para `.onion`, que no es resoluble por DNS normal. Para un coordinador clearnet, dejá `ROBOSATS_PROXY_URL` vacío y no hace falta el proxy.)
 
-`App\Services\RoboSats\RoboSatsClient::fetchBook()` ya envuelve toda la llamada HTTP (proxy incluido) en un `try/catch` que nunca deja escapar la excepción: si Tor está caído o el proxy no responde, el método loggea el error y devuelve un array vacío. `PollRoboSatsOrders` trata eso igual que "no hay órdenes nuevas" y sigue — nunca falla el comando ni afecta a `/mempool`, `/vip`, `/escrow` ni a las otras entradas del scheduler (`vip-subscriptions:expire`, `escrow-jobs:cancel-expired`), que corren de forma independiente. Cobertura: `tests/Unit/RoboSatsClientTest.php` y `tests/Feature/PollRoboSatsOrdersTest.php`.
+`App\Services\RoboSats\RoboSatsClient::fetchBook()` ya envuelve toda la llamada HTTP (proxy incluido) en un `try/catch` que nunca deja escapar la excepción: si Tor está caído o el proxy no responde, el método loggea el error y devuelve un array vacío — `RoboSatsDriver` lo traduce a "sin ofertas de esta fuente" y el agregador sigue con Mostro con normalidad. Cobertura: `tests/Unit/RoboSatsClientTest.php`, `tests/Unit/P2P/RoboSatsDriverTest.php` y `tests/Feature/PollP2POffersTest.php`.
+
+### Configuración de Mostro (relays de Nostr)
+
+```bash
+MOSTRO_RELAYS=wss://relay.mostro.network,wss://nostr.bitcoiner.social
+MOSTRO_PUBKEY=<clave pública en hex del Mostro que querés sondear>
+MOSTRO_RELAY_TIMEOUT_SECONDS=8
+```
+
+Varios relays separados por coma es lo recomendado — si uno está caído, `MostroDriver` sigue con los demás (ver arriba). El pubkey es imprescindible: sin él, cualquier evento kind `38383` de cualquier instancia de Mostro en esos relays se tomaría como una orden válida. Cobertura: `tests/Unit/P2P/MostroDriverTest.php` (incluye el caso de un relay caído) y `tests/Feature/PollP2POffersTest.php`.
 
 ## 3. Escrow Lightning para empleos
 
@@ -243,12 +261,15 @@ pirapire/
 │   ├── app/Services/Lightning/     # Cliente LNbits
 │   ├── app/Services/Escrow/        # Máquina de estados del escrow
 │   ├── app/Services/Telegram/      # Clientes de las dos Bot API (admin y clientes)
-│   ├── app/Services/RoboSats/      # Cliente del order book + matching de alertas
+│   ├── app/Services/RoboSats/      # Cliente HTTP del order book de RoboSats
+│   ├── app/Services/Nostr/         # Cliente de relays Nostr (usado por el driver de Mostro)
+│   ├── app/Services/P2P/           # Adaptador de fuentes P2P: drivers, agregador, matching, formato de mensaje
+│   ├── app/Contracts/, app/DTOs/   # P2PProviderInterface + NormalizedP2POffer
 │   ├── app/Services/Mempool/       # Cliente de mempool.space
 │   ├── app/Services/Bot/           # Router de comandos del bot de clientes
 │   ├── app/Services/Stats/         # Métricas compartidas por Filament y la Mini App admin
-│   ├── app/Console/Commands/       # robosats:poll (scheduler)
-│   ├── app/Jobs/                   # SendRoboSatsAlert (cola, con delay para el plan gratuito)
+│   ├── app/Console/Commands/       # p2p:poll (scheduler)
+│   ├── app/Jobs/                   # SendP2POfferAlert (cola, con delay para el plan gratuito)
 │   ├── app/Filament/Resources/     # Panel de administración
 │   ├── app/Http/Controllers/       # Webhooks de Telegram (admin y clientes), escrow
 │   ├── app/Http/Controllers/MiniApp/  # API JSON detrás de las dos Mini Apps
@@ -272,7 +293,7 @@ php artisan migrate
 php artisan db:seed  # opcional: datos de prueba — ver "Datos de prueba" más abajo
 npm run dev &        # Vite dev server (Tailwind hot-reload)
 php artisan serve
-php artisan schedule:work &   # corre robosats:poll y la limpieza de escrows expirados
+php artisan schedule:work &   # corre p2p:poll y la limpieza de escrows expirados
 php artisan queue:work        # procesa las alertas de RoboSats encoladas
 ```
 
@@ -321,6 +342,7 @@ Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
 - `ROBOSATS_API_BASE_URL` / `ROBOSATS_PROXY_URL`: coordinador de RoboSats a sondear y, opcionalmente, el proxy SOCKS5/Tor para llegar a un `.onion` (sin valor por defecto — ver sección 2, "Configuración de RoboSats (Tor / proxy)").
+- `MOSTRO_RELAYS` / `MOSTRO_PUBKEY` / `MOSTRO_RELAY_TIMEOUT_SECONDS`: relays de Nostr y clave pública del Mostro a sondear (sin valor por defecto — ver sección 2, "Configuración de Mostro (relays de Nostr)").
 - `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
 
 ## CI/CD
