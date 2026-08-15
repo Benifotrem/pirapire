@@ -188,6 +188,15 @@ curl -s "https://api.telegram.org/bot<TELEGRAM_ADMIN_BOT_TOKEN>/setChatMenuButto
 cd web && npm install && npm run build   # compila Tailwind/Vite (public/build/manifest.json)
 ```
 
+### Cartel de anuncios LED
+
+Entre el logo y el botón de login, el header muestra un cartel estilo LED de los 90 (`resources/views/components/led-display.blade.php`) que rota mensajes publicitarios — cada uno con su propio enlace, que se abre en una pestaña nueva al hacer clic. Se administra completo desde Filament, sin tocar código:
+
+- **Anuncios LED** (`App\Filament\Resources\LedAdResource`): alta/baja de mensajes, enlace, orden del carrusel y activo/inactivo.
+- **Configuración del cartel** (`App\Filament\Pages\LedDisplaySettingsPage`): apagar el cartel entero, o elegir el color (rojo, verde, azul eléctrico, o mixto — aleatorio por anuncio).
+
+`App\View\Composers\LedDisplayComposer` inyecta los anuncios activos y el color configurado en cada página que extiende `layouts.app` (cacheado 30s vía `Cache::remember`, invalidado al instante al guardar cambios en el panel). Si no hay anuncios activos o el cartel está apagado, no se renderiza nada.
+
 ## Estructura del repositorio
 
 ```

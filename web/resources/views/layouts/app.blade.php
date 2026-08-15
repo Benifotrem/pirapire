@@ -17,6 +17,8 @@
                     <img src="{{ asset('images/logo.png') }}" alt="Pirapire.pro" class="h-24 w-auto object-contain">
                 </a>
 
+                <x-led-display :led-display="$ledDisplay ?? null" />
+
                 <nav class="flex items-center gap-3">
                     @auth('customer')
                         <a href="{{ route('dashboard') }}" class="text-sm font-medium text-slate-600 transition hover:text-blue-600">Panel</a>
