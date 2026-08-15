@@ -4,9 +4,10 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
+    # No `ports:` — nginx is not reachable from outside the Docker network
+    # at all. The only way in is through the `cloudflared` service below,
+    # over the private network, at http://nginx:80. See README "Cloudflare
+    # Tunnel" for how the tunnel routes pirapire.pro to that address.
     volumes:
       # Bind-mounted from the host, so it must be built *before* `docker
       # compose up`:
@@ -17,12 +18,29 @@ services:
       - ./web/public:/var/www/html/public:ro
       - ./docker/nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
       - ./docker/nginx/php-fpm.conf:/etc/nginx/php-fpm.conf:ro
-      # Cloudflare Origin Certificate (Full Strict mode) — generated in the
-      # Cloudflare dashboard, never committed. See README "HTTPS con
-      # Cloudflare" for how to create it.
-      - ./docker/nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - web
+
+  # Outbound-only connection from the VPS to Cloudflare's edge — Cloudflare
+  # routes pirapire.pro to this tunnel and forwards requests down it to
+  # `http://nginx:80`, so nginx (and everything behind it) never needs a
+  # publicly reachable port. TLS is terminated at Cloudflare's edge; see
+  # README "Cloudflare Tunnel" for how to create the tunnel and get the
+  # token that goes in CLOUDFLARE_TUNNEL_TOKEN.
+  #
+  # Gated behind the "production" profile so a plain local `docker compose
+  # up` never tries to start it (no token needed for local dev, where
+  # nginx is reached directly instead — see docker-compose.local.yml).
+  # On the VPS, set `COMPOSE_PROFILES=production` in the root .env so
+  # every `docker compose` command picks this up automatically, with no
+  # extra flags to remember.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["production"]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
 
   web:
     build:
@@ -110,8 +128,16 @@ services:
       # mount below) with no further config needed.
     volumes:
       - lnbits_data:/app/data
-    ports:
-      - "5000:5000"
+    # No `ports:` — not reachable from outside the Docker network, nor
+    # from the VPS host's own localhost (same reasoning as nginx above).
+    # To reach the LNbits web UI (e.g. to copy the Admin/Invoice-read keys
+    # on first setup), either add a second public hostname to the
+    # Cloudflare Tunnel pointing at http://lnbits:5000 and gate it behind
+    # Cloudflare Access, or temporarily add `- "127.0.0.1:5000:5000"`
+    # here, `docker compose up -d lnbits` to apply it, do what you need
+    # against http://127.0.0.1:5000 over an SSH tunnel to the VPS, then
+    # remove the line and `docker compose up -d lnbits` again. See README
+    # "Cloudflare Tunnel".
 
   # Local SOCKS5 proxy into the Tor network, for reaching RoboSats when its
   # only reliable endpoint is a .onion address (many community/official
@@ -123,8 +149,9 @@ services:
   tor:
     image: dperson/torproxy:latest
     restart: unless-stopped
-    ports:
-      - "9050:9050"
+    # No `ports:` — only `scheduler` needs this, reachable over the
+    # private Docker network at tor:9050 (see ROBOSATS_PROXY_URL). No
+    # reason to publish a SOCKS5 proxy to the internet.
 
 volumes:
   db_data:

@@ -282,8 +282,10 @@ O con Docker Compose (recomendado para un entorno completo, incluyendo Postgres,
 cp .env.example .env                       # variables que usa docker-compose.yml (DB_PASSWORD, etc.)
 cp web/.env.example web/.env
 (cd web && npm install && npm run build)   # nginx serves public/ straight off the host
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
+
+El `docker-compose.yml` base no publica **ningún** puerto a propósito — está pensado para correr en el VPS detrás de un Cloudflare Tunnel (ver más abajo), donde nginx no debe ser alcanzable directo. `docker-compose.local.yml` (solo para desarrollo, nunca se aplica solo) le agrega de vuelta `nginx` en `http://localhost:8080` y `lnbits` en `http://localhost:5000`. Se pasa explícito con `-f` en cada comando — a diferencia de `docker-compose.override.yml`, este nombre no tiene magia especial en Compose, así que no hay riesgo de que se aplique sin querer en el VPS.
 
 Son **dos** archivos `.env` distintos, cada uno con un rol distinto:
 
@@ -311,7 +313,7 @@ cd web && php artisan test          # requiere ext-gmp o ext-bcmath (verificaci�
 
 ## Variables de entorno clave
 
-Ver `web/.env.example`. Destacadas:
+Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para las que lee `docker compose` directamente — incluidas `CLOUDFLARE_TUNNEL_TOKEN` y `COMPOSE_PROFILES=production`, ver "Cloudflare Tunnel" más abajo. Destacadas:
 
 - `LNBITS_ADMIN_KEY`, `LNBITS_INVOICE_READ_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia el escrow.
 - `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
@@ -326,30 +328,32 @@ Ver `web/.env.example`. Destacadas:
 - `.github/workflows/laravel-ci.yml`: Pint (estilo), migraciones sobre SQLite, `php artisan test`.
 - `.github/workflows/deploy.yml`: despliegue manual/por release al VPS vía SSH (`docker compose build && up`, migraciones, cache de config/rutas/vistas). Requiere los secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` configurados en el repositorio — no se ejecuta automáticamente en cada push. También requiere que los dos `.env` (raíz y `web/`, ver tabla arriba) ya existan en `/opt/pirapire` en el VPS **antes** del primer deploy — como están en `.gitignore`, `git reset --hard` nunca los toca, pero tampoco los crea; si falta alguno el workflow corta antes de construir las imágenes y te dice cuál.
 
-## HTTPS con Cloudflare (Full Strict)
+## Cloudflare Tunnel
 
-`pirapire.pro` está pensado para correr detrás de Cloudflare en modo **Full (strict)**: Cloudflare atiende HTTPS a los visitantes y vuelve a cifrar el tramo hacia el VPS, y nginx valida ese tramo con un **Origin Certificate** propio de Cloudflare. Es obligatorio para esta app — el login LNURL-auth genera URLs `lightning:LNURL1...` que las billeteras solo aceptan sobre HTTPS real.
+`pirapire.pro` corre detrás de un **Cloudflare Tunnel** (`cloudflared`, ver `docker-compose.yml`): el VPS no tiene **ningún** puerto público abierto — ni `80`/`443` en nginx, ni `5000` en LNbits. `cloudflared` abre una conexión saliente desde el VPS hacia el borde de Cloudflare; Cloudflare le enruta `pirapire.pro` a esa conexión y el túnel reenvía el tráfico a `http://nginx:80` por la red interna de Docker. La terminación TLS ocurre en el borde de Cloudflare, no en el VPS — nginx nunca ve ni necesita un certificado. Esto reemplaza el enfoque anterior (Origin Certificate + modo Full Strict + puertos expuestos): mismo resultado para el visitante (HTTPS real, obligatorio para que las billeteras acepten las URLs `lightning:LNURL1...` del login LNURL-auth), pero sin exponer nada del VPS a Internet — ni siquiera nginx.
 
-**1. Generar el Origin Certificate** (una sola vez, en el dashboard de Cloudflare):
+**1. Crear el túnel** (una sola vez, en el [dashboard de Cloudflare Zero Trust](https://one.dash.cloudflare.com/)):
 
-1. `SSL/TLS` → `Origin Server` → **Create Certificate**.
-2. Dejá las opciones por defecto (RSA, 15 años) y agregá `pirapire.pro` y `*.pirapire.pro` como hostnames.
-3. Cloudflare te muestra un certificado y una clave privada — **no se pueden volver a ver después**, guardalos ahora.
+1. `Networks` → `Tunnels` → **Create a tunnel** → elegí **Cloudflared** como conector.
+2. Ponele un nombre (por ejemplo `pirapire-vps`) y **Save tunnel**.
+3. En el paso "Install and run a connector", Cloudflare te muestra un comando con un token largo (`--token eyJ...`) — copiá solo ese token, es lo que va en `CLOUDFLARE_TUNNEL_TOKEN`. No hace falta instalar nada manualmente: `cloudflared` ya corre como contenedor en `docker-compose.yml`.
+4. En "Public Hostnames", agregá una entrada: dominio `pirapire.pro` (y otra para `www.pirapire.pro`), tipo de servicio **HTTP**, URL `nginx:80`.
 
-**2. Instalarlo en el VPS** (nunca se commitea al repo — quedan en `.gitignore`):
+**2. Configurar el VPS** (`/opt/pirapire/.env`, la raíz — no `web/.env`):
 
 ```bash
-mkdir -p /opt/pirapire/docker/nginx/certs
-nano /opt/pirapire/docker/nginx/certs/cloudflare-origin.pem   # pegar el certificado
-nano /opt/pirapire/docker/nginx/certs/cloudflare-origin.key   # pegar la clave privada
-chmod 600 /opt/pirapire/docker/nginx/certs/cloudflare-origin.key
+CLOUDFLARE_TUNNEL_TOKEN=<el token del paso 1>
+COMPOSE_PROFILES=production   # activa el servicio cloudflared en todo comando docker compose
 ```
 
-**3. Activar el modo en Cloudflare**: `SSL/TLS` → `Overview` → elegir **Full (strict)**. (Con "Flexible" o "Full" sin *strict*, nginx no tiene todavía un certificado público válido y Cloudflare rechazaría la conexión al origen.)
+**3. Desplegar** — `docker compose up -d` (manual o vía `deploy.yml`) ya levanta `cloudflared` gracias a `COMPOSE_PROFILES`, y ni nginx ni LNbits publican puertos. Podés (y deberías) cerrar `80`, `443` y `5000` en el firewall del VPS/proveedor — ya no hace falta que estén abiertos para nada.
 
-**4. Redesplegar** — el próximo `docker compose up -d` (manual o vía `deploy.yml`) ya deja nginx escuchando en `80` (redirige a `443`) y `443` con ese certificado.
+**Acceder a la UI de LNbits** (para copiar el Admin/Invoice-read key la primera vez) ya no es tan directo como antes, a propósito. Dos opciones, documentadas también en el comentario del servicio `lnbits` en `docker-compose.yml`:
 
-Endurecimiento opcional recomendado más adelante: **Authenticated Origin Pulls** (`SSL/TLS` → `Origin Server`), que hace que nginx solo acepte conexiones que traigan el certificado cliente de Cloudflare — así nadie puede pegarle a la IP del VPS saltándose Cloudflare, ni aunque conozca la IP.
+- Agregar un segundo "Public Hostname" al mismo túnel (por ejemplo `lnbits.pirapire.pro` → `lnbits:5000`) y protegerlo con **Cloudflare Access** (`Access` → `Applications` → restringir por tu email) — así solo vos podés entrar, autenticado con Cloudflare, sin exponer nada al público.
+- O, para un chequeo puntual, agregar temporalmente `- "127.0.0.1:5000:5000"` a las `ports:` del servicio `lnbits`, `docker compose up -d lnbits`, hacer lo que necesites por un túnel SSH, y sacar la línea de nuevo.
+
+**Desarrollo local no usa nada de esto** — no hace falta token ni túnel. `docker-compose.local.yml` publica nginx y LNbits directo en `localhost` (ver "Desarrollo local" más arriba), y el servicio `cloudflared` ni se levanta (queda detrás del profile `production`, que un `docker compose up` normal no activa).
 
 ## Licencia
 

@@ -1,0 +1,21 @@
+# Local-development-only additions on top of docker-compose.yml — never
+# applied automatically (unlike docker-compose.override.yml, this name has
+# no special meaning to Compose), so there's no risk of it accidentally
+# also applying on the VPS and re-exposing these ports there. Use it
+# explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#
+# It exists because the base docker-compose.yml deliberately publishes no
+# ports at all (see its nginx/lnbits comments) — that's correct for the
+# VPS, which is meant to be reached only through the `cloudflared` tunnel,
+# but useless for local dev, which has no tunnel and needs a normal
+# localhost URL to open in a browser.
+services:
+  nginx:
+    ports:
+      - "8080:80"
+
+  lnbits:
+    ports:
+      - "5000:5000"
