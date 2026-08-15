@@ -9,9 +9,11 @@ services:
       - "443:443"
     volumes:
       # Bind-mounted from the host, so it must be built *before* `docker
-      # compose up` (the web image builds its own copy internally too, but
-      # nginx reads straight off the host, not the container's filesystem):
+      # compose up`:
       #   cd web && npm install && npm run build
+      # The `web` service below mounts this same host directory (not just
+      # the image's own baked-in copy) so nginx and PHP-FPM can't disagree
+      # about which build is current.
       - ./web/public:/var/www/html/public:ro
       - ./docker/nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
       - ./docker/nginx/php-fpm.conf:/etc/nginx/php-fpm.conf:ro
@@ -29,6 +31,17 @@ services:
     env_file: ./web/.env
     volumes:
       - ./web/storage:/var/www/html/storage
+      # Without this, PHP-FPM renders @vite() asset URLs from the
+      # manifest.json baked into the image at `docker compose build` time
+      # (see web/Dockerfile's `assets` stage) — a *different* copy of
+      # public/build than the one nginx serves straight off the host (see
+      # the nginx service's volumes below). Running `npm run build` after
+      # `docker compose build` (or vice versa) then leaves the two
+      # disagreeing: nginx serves the fresh CSS/JS files fine, but the HTML
+      # PHP-FPM renders still links to the old, now-404ing hashed
+      # filenames. Bind-mounting the same host directory here keeps both
+      # looking at one source of truth.
+      - ./web/public:/var/www/html/public
     depends_on:
       - db
       - redis

@@ -30,11 +30,11 @@ jobs:
             git fetch origin claude/pirapire-bitcoin-lightning-main
             git reset --hard origin/claude/pirapire-bitcoin-lightning-main
 
-            # Fail fast, before the ~1min Docker build, if any of the three
-            # required .env files are missing. They're gitignored on
-            # purpose (secrets) so `git reset --hard` never touches them —
-            # if one's missing it's because it was never created on this
-            # VPS, not because the deploy wiped it out.
+            # Fail fast, before the ~1min Docker build, if either required
+            # .env file (or the Cloudflare cert) is missing. They're
+            # gitignored on purpose (secrets) so `git reset --hard` never
+            # touches them — if one's missing it's because it was never
+            # created on this VPS, not because the deploy wiped it out.
             env_ok=1
             if [ ! -f .env ]; then
               echo "Missing .env (repo root) — docker-compose needs it for \${DB_PASSWORD} etc. Copy from .env.example and fill in secrets."
