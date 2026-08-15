@@ -199,6 +199,15 @@ Entre el logo y el botón de login, el header muestra un cartel estilo LED de lo
 
 **Alta de comercios, sin intervención manual del admin:** en `/anunciar` (`App\Http\Controllers\LedAdSubmissionController`) hay un formulario público pensado para comercios paraguayos que aceptan Bitcoin — nombre, rubro, ciudad, si acepta Lightning/on-chain, el mensaje y enlace para el cartel, y datos de contacto (estos últimos no se publican). Cada envío queda `pending` en **Solicitudes de comercios** (`App\Filament\Resources\LedAdSubmissionResource`, con badge de pendientes en el menú) hasta que un admin lo revisa: **Aprobar** deja editar el mensaje/enlace antes de confirmar y crea el `LedAd` correspondiente; **Rechazar** solo lo descarta, con una nota opcional. Nada llega al cartel público sin pasar por esa revisión.
 
+### Selector de idioma (ES/EN)
+
+El sitio público y la Mini App de clientes son bilingües (español de Paraguay / inglés de EEUU); el panel admin y la Mini App de administración se mantienen solo en español a propósito.
+
+- `App\Http\Middleware\SetLocale` lee el idioma guardado en sesión (`session('locale')`) y llama a `App::setLocale()` en cada request; se registra en `bootstrap/app.php` únicamente en el grupo `web`, no en el panel de Filament.
+- `GET /lang/{locale}` (`App\Http\Controllers\LocaleController`) guarda `es` o `en` en sesión y redirige de vuelta (`back()`); cualquier otro valor se ignora.
+- Traducciones en `lang/es/site.php` y `lang/en/site.php` (landing, dashboard, login, formulario `/anunciar`) vía el helper `__()` en las vistas Blade; `lang/es/miniapp.php` y `lang/en/miniapp.php` para la Mini App de clientes, inyectadas al JS con `const T = @json(__('miniapp'))`.
+- `<x-language-switcher />` (botones ES/EN) está en el header de `layouts.app.blade.php`; la Mini App de clientes tiene su propio selector en el panel Inicio, que hace `fetch('/lang/xx')` y recarga la página.
+
 ## Estructura del repositorio
 
 ```

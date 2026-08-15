@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateAdminMiniApp;
 use App\Http\Middleware\AuthenticateCustomerMiniApp;
+use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'miniapp.customer' => AuthenticateCustomerMiniApp::class,
             'miniapp.admin' => AuthenticateAdminMiniApp::class,
         ]);
+
+        // Public site language switch (see App\Http\Controllers\LocaleController)
+        // — deliberately not applied to the Filament admin panel, which has
+        // its own middleware stack and stays Spanish-only.
+        $middleware->web(append: [SetLocale::class]);
 
         // nginx (the `web` container's only client) sits behind Cloudflare;
         // trust it as the immediate proxy so Laravel reads the real client

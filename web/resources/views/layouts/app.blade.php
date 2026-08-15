@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="es" class="scroll-smooth">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="scroll-smooth">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? 'Pirapire.pro — Bitcoin & Lightning soberano para Paraguay' }}</title>
-    <meta name="description" content="Alertas P2P de RoboSats, Escrow Lightning para empleos y herramientas de Mempool — con login soberano vía LNURL-auth.">
+    <title>{{ $title ?? __('site.layout.meta_title') }}</title>
+    <meta name="description" content="{{ __('site.layout.meta_description') }}">
     <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -20,17 +20,19 @@
                 <x-led-display :led-display="$ledDisplay ?? null" />
 
                 <nav class="flex items-center gap-3">
+                    <x-language-switcher />
+
                     @auth('customer')
-                        <a href="{{ route('dashboard') }}" class="text-sm font-medium text-slate-600 transition hover:text-blue-600">Panel</a>
+                        <a href="{{ route('dashboard') }}" class="text-sm font-medium text-slate-600 transition hover:text-blue-600">{{ __('site.layout.nav_panel') }}</a>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50">
-                                Cerrar sesión
+                                {{ __('site.layout.nav_logout') }}
                             </button>
                         </form>
                     @else
                         <a href="{{ route('login') }}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
-                            Iniciar sesión con Lightning
+                            {{ __('site.layout.nav_login') }}
                         </a>
                     @endauth
                 </nav>
@@ -44,7 +46,7 @@
         <footer class="border-t border-slate-200 bg-slate-50">
             <div class="mx-auto max-w-7xl px-4 py-8 text-sm text-slate-500 sm:px-6 lg:px-8">
                 <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
-                    <p>© {{ date('Y') }} Pirapire.pro — Plataforma soberana Bitcoin/Lightning para Paraguay.</p>
+                    <p>© {{ date('Y') }} Pirapire.pro — {{ __('site.layout.footer_tagline') }}</p>
                     <p class="font-mono text-xs text-slate-400">LNURL-auth · Escrow Lightning · RoboSats P2P</p>
                 </div>
             </div>

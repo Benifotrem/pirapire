@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -26,43 +26,48 @@
 <body class="min-h-screen font-sans antialiased pb-24">
 
     <div id="outside-warning" class="hidden p-6 text-center">
-        <p class="text-lg font-semibold">Abrí esto desde el bot de Telegram</p>
-        <p class="pp-hint mt-2 text-sm">Esta página necesita ejecutarse dentro de Telegram para identificarte.</p>
+        <p class="text-lg font-semibold">{{ __('miniapp.outside_title') }}</p>
+        <p class="pp-hint mt-2 text-sm">{{ __('miniapp.outside_body') }}</p>
     </div>
 
     <div id="app" class="hidden mx-auto max-w-lg px-4 pt-4">
 
         <!-- Inicio -->
         <section data-panel="inicio">
-            <div class="flex items-center justify-center py-2">
+            <div class="flex items-center justify-between py-2">
+                <span></span>
                 <img src="{{ asset('images/logo.png') }}" alt="BØLT" class="h-20 w-20 object-contain">
+                <div class="flex items-center overflow-hidden rounded-lg border pp-card text-xs font-semibold" style="border-color: var(--pp-hint)">
+                    <a href="#" data-set-locale="es" class="px-2 py-1 {{ app()->getLocale() === 'es' ? 'pp-link' : 'pp-hint' }}">ES</a>
+                    <a href="#" data-set-locale="en" class="px-2 py-1 {{ app()->getLocale() === 'en' ? 'pp-link' : 'pp-hint' }}">EN</a>
+                </div>
             </div>
 
             <div class="rounded-2xl p-5 text-white shadow-sm" style="background: linear-gradient(to right, #2563eb, #4f46e5, #7c3aed)">
-                <p id="vip-badge" class="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">Cargando…</p>
+                <p id="vip-badge" class="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">{{ __('miniapp.loading') }}</p>
                 <p id="vip-detail" class="mt-3 text-sm text-white/90"></p>
             </div>
 
             <div class="mt-4 grid grid-cols-2 gap-3">
                 <button data-nav="alertas" class="pp-card rounded-xl p-4 text-left shadow-sm">
                     <span class="text-2xl">🔔</span>
-                    <p class="mt-2 font-semibold">Alertas P2P</p>
-                    <p class="pp-hint text-xs">RoboSats PYG/USD</p>
+                    <p class="mt-2 font-semibold">{{ __('miniapp.nav_alerts') }}</p>
+                    <p class="pp-hint text-xs">{{ __('miniapp.nav_alerts_sub') }}</p>
                 </button>
                 <button data-nav="escrow" class="pp-card rounded-xl p-4 text-left shadow-sm">
                     <span class="text-2xl">🔒</span>
-                    <p class="mt-2 font-semibold">Escrow</p>
-                    <p class="pp-hint text-xs">Trabajos Lightning</p>
+                    <p class="mt-2 font-semibold">{{ __('miniapp.nav_escrow') }}</p>
+                    <p class="pp-hint text-xs">{{ __('miniapp.nav_escrow_sub') }}</p>
                 </button>
                 <button data-nav="mempool" class="pp-card rounded-xl p-4 text-left shadow-sm">
                     <span class="text-2xl">⛓️</span>
-                    <p class="mt-2 font-semibold">Mempool</p>
-                    <p class="pp-hint text-xs">Bloque y tarifas</p>
+                    <p class="mt-2 font-semibold">{{ __('miniapp.nav_mempool') }}</p>
+                    <p class="pp-hint text-xs">{{ __('miniapp.nav_mempool_sub') }}</p>
                 </button>
                 <a href="https://pirapire.pro" target="_blank" class="pp-card rounded-xl p-4 text-left shadow-sm">
                     <span class="text-2xl">🌐</span>
                     <p class="mt-2 font-semibold">pirapire.pro</p>
-                    <p class="pp-hint text-xs">Panel completo</p>
+                    <p class="pp-hint text-xs">{{ __('miniapp.nav_full_panel') }}</p>
                 </a>
             </div>
         </section>
@@ -70,43 +75,43 @@
         <!-- Alertas -->
         <section data-panel="alertas" class="hidden">
             <div class="flex items-center justify-between">
-                <h1 class="text-lg font-bold">Alertas P2P</h1>
-                <button data-nav="alertas-nueva" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">+ Nueva</button>
+                <h1 class="text-lg font-bold">{{ __('miniapp.alerts_title') }}</h1>
+                <button data-nav="alertas-nueva" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">{{ __('miniapp.alerts_new') }}</button>
             </div>
             <div id="alerts-list" class="mt-4 space-y-3"></div>
         </section>
 
         <section data-panel="alertas-nueva" class="hidden">
-            <h1 class="text-lg font-bold">Nueva alerta</h1>
+            <h1 class="text-lg font-bold">{{ __('miniapp.alerts_new_title') }}</h1>
             <form id="alert-form" class="mt-4 space-y-4">
                 <div>
-                    <label class="pp-hint block text-xs font-medium">Moneda</label>
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_currency') }}</label>
                     <select name="currency" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
                         <option value="PYG">PYG</option>
                         <option value="USD">USD</option>
                     </select>
                 </div>
                 <div>
-                    <label class="pp-hint block text-xs font-medium">Tipo de orden</label>
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_order_type') }}</label>
                     <select name="order_type" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
-                        <option value="ANY">Cualquiera</option>
-                        <option value="BUY">Compra</option>
-                        <option value="SELL">Venta</option>
+                        <option value="ANY">{{ __('miniapp.alerts_any') }}</option>
+                        <option value="BUY">{{ __('miniapp.alerts_buy') }}</option>
+                        <option value="SELL">{{ __('miniapp.alerts_sell') }}</option>
                     </select>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="pp-hint block text-xs font-medium">Monto mínimo</label>
+                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_min_amount') }}</label>
                         <input type="number" name="min_amount" min="0" class="pp-card mt-1 w-full rounded-lg border-slate-300 font-mono text-sm">
                     </div>
                     <div>
-                        <label class="pp-hint block text-xs font-medium">Monto máximo</label>
+                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_max_amount') }}</label>
                         <input type="number" name="max_amount" min="0" class="pp-card mt-1 w-full rounded-lg border-slate-300 font-mono text-sm">
                     </div>
                 </div>
                 <div>
-                    <label class="pp-hint block text-xs font-medium">Métodos de pago (separados por coma)</label>
-                    <input type="text" name="payment_methods" placeholder="PIX, transferencia bancaria" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_payment_methods') }}</label>
+                    <input type="text" name="payment_methods" placeholder="{{ __('miniapp.alerts_payment_methods_placeholder') }}" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
                 </div>
                 <p id="alert-form-error" class="hidden text-sm text-rose-600"></p>
             </form>
@@ -115,21 +120,21 @@
         <!-- Escrow -->
         <section data-panel="escrow" class="hidden">
             <div class="flex items-center justify-between">
-                <h1 class="text-lg font-bold">Escrow Lightning</h1>
-                <button data-nav="escrow-nuevo" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">+ Nuevo</button>
+                <h1 class="text-lg font-bold">{{ __('miniapp.escrow_title') }}</h1>
+                <button data-nav="escrow-nuevo" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">{{ __('miniapp.escrow_new') }}</button>
             </div>
             <div id="escrow-list" class="mt-4 space-y-3"></div>
         </section>
 
         <section data-panel="escrow-nuevo" class="hidden">
-            <h1 class="text-lg font-bold">Nuevo trabajo de escrow</h1>
+            <h1 class="text-lg font-bold">{{ __('miniapp.escrow_new_title') }}</h1>
             <form id="escrow-form" class="mt-4 space-y-4">
                 <div>
-                    <label class="pp-hint block text-xs font-medium">Monto (sats)</label>
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.escrow_amount_sats') }}</label>
                     <input type="number" name="amount_sats" min="1" required class="pp-card mt-1 w-full rounded-lg border-slate-300 font-mono text-sm">
                 </div>
                 <div>
-                    <label class="pp-hint block text-xs font-medium">Descripción</label>
+                    <label class="pp-hint block text-xs font-medium">{{ __('miniapp.escrow_description') }}</label>
                     <textarea name="description" required rows="3" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm"></textarea>
                 </div>
                 <p id="escrow-form-error" class="hidden text-sm text-rose-600"></p>
@@ -142,7 +147,7 @@
 
         <!-- Mempool -->
         <section data-panel="mempool" class="hidden">
-            <h1 class="text-lg font-bold">Estado de la Mempool</h1>
+            <h1 class="text-lg font-bold">{{ __('miniapp.mempool_title') }}</h1>
             <div id="mempool-content" class="mt-4"></div>
         </section>
     </div>
@@ -157,12 +162,23 @@
         tg.ready();
         tg.expand();
 
+        const T = @json(__('miniapp'));
+        const t = (key) => T[key] ?? key;
+
+        document.querySelectorAll('[data-set-locale]').forEach(el => {
+            el.addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch(`/lang/${el.dataset.setLocale}`, { credentials: 'same-origin' });
+                location.reload();
+            });
+        });
+
         const app = document.getElementById('app');
         app.classList.remove('hidden');
 
         const statusStyles = {
-            created: 'Creado', funded: 'Fondeado', in_progress: 'En curso',
-            completed: 'Completado', disputed: 'En disputa', refunded: 'Reembolsado', cancelled: 'Cancelado',
+            created: t('escrow_status_created'), funded: t('escrow_status_funded'), in_progress: t('escrow_status_in_progress'),
+            completed: t('escrow_status_completed'), disputed: t('escrow_status_disputed'), refunded: t('escrow_status_refunded'), cancelled: t('escrow_status_cancelled'),
         };
 
         async function api(path, options = {}) {
@@ -175,7 +191,7 @@
                 },
             });
             const body = await res.json().catch(() => null);
-            if (!res.ok) throw new Error(body?.message || 'Error de conexión');
+            if (!res.ok) throw new Error(body?.message || t('error_generic'));
             return body;
         }
 
@@ -209,21 +225,21 @@
             const badge = document.getElementById('vip-badge');
             const detail = document.getElementById('vip-detail');
             if (me.is_vip) {
-                badge.textContent = '⭐ VIP';
-                detail.textContent = 'Alertas P2P instantáneas, sin retraso.';
+                badge.textContent = t('vip_badge_vip');
+                detail.textContent = t('vip_detail_vip');
             } else {
-                badge.textContent = 'Plan gratuito';
-                detail.textContent = 'Alertas P2P con 10 min de retraso frente a VIP.';
+                badge.textContent = t('vip_badge_free');
+                detail.textContent = t('vip_detail_free');
             }
         }
 
         // --- Alertas --------------------------------------------------
         async function loadAlerts() {
             const list = document.getElementById('alerts-list');
-            list.innerHTML = '<p class="pp-hint text-sm">Cargando…</p>';
+            list.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
             const alerts = await api('/alerts');
             if (!alerts.length) {
-                list.innerHTML = '<p class="pp-hint text-sm">Todavía no configuraste ninguna alerta.</p>';
+                list.innerHTML = `<p class="pp-hint text-sm">${t('alerts_empty')}</p>`;
                 return;
             }
             list.innerHTML = '';
@@ -235,11 +251,11 @@
                         <div>
                             <p class="font-semibold">${a.currency} · ${a.order_type}</p>
                             <p class="pp-hint text-xs font-mono">${a.min_amount ?? '0'}–${a.max_amount ?? '∞'}</p>
-                            <span class="text-xs ${a.is_active ? 'text-emerald-600' : 'pp-hint'}">${a.is_active ? '● Activa' : '○ Pausada'}</span>
+                            <span class="text-xs ${a.is_active ? 'text-emerald-600' : 'pp-hint'}">${a.is_active ? t('alerts_active') : t('alerts_paused')}</span>
                         </div>
                         <div class="flex gap-2">
-                            <button data-toggle="${a.id}" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium">${a.is_active ? 'Pausar' : 'Activar'}</button>
-                            <button data-delete="${a.id}" class="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600">Borrar</button>
+                            <button data-toggle="${a.id}" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium">${a.is_active ? t('alerts_pause') : t('alerts_activate')}</button>
+                            <button data-delete="${a.id}" class="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600">${t('alerts_delete')}</button>
                         </div>
                     </div>`;
                 list.appendChild(row);
@@ -249,7 +265,7 @@
                 loadAlerts();
             }));
             list.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', () => {
-                tg.showConfirm('¿Borrar esta alerta?', async (ok) => {
+                tg.showConfirm(t('alerts_confirm_delete'), async (ok) => {
                     if (!ok) return;
                     await api(`/alerts/${btn.dataset.delete}`, { method: 'DELETE' });
                     loadAlerts();
@@ -258,7 +274,7 @@
         }
 
         function setupAlertForm() {
-            tg.MainButton.setText('Crear alerta').show();
+            tg.MainButton.setText(t('alerts_create')).show();
             mainButtonAction = async () => {
                 const form = document.getElementById('alert-form');
                 const data = Object.fromEntries(new FormData(form).entries());
@@ -287,10 +303,10 @@
         // --- Escrow -----------------------------------------------------
         async function loadEscrowJobs() {
             const list = document.getElementById('escrow-list');
-            list.innerHTML = '<p class="pp-hint text-sm">Cargando…</p>';
+            list.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
             const jobs = await api('/escrow-jobs');
             if (!jobs.length) {
-                list.innerHTML = '<p class="pp-hint text-sm">Todavía no creaste ningún contrato de escrow.</p>';
+                list.innerHTML = `<p class="pp-hint text-sm">${t('escrow_empty')}</p>`;
                 return;
             }
             list.innerHTML = '';
@@ -312,7 +328,7 @@
         }
 
         function setupEscrowForm() {
-            tg.MainButton.setText('Crear escrow').show();
+            tg.MainButton.setText(t('escrow_create')).show();
             mainButtonAction = async () => {
                 const form = document.getElementById('escrow-form');
                 const data = Object.fromEntries(new FormData(form).entries());
@@ -338,7 +354,7 @@
         async function showEscrowDetail(id) {
             show('escrow-detalle');
             const el = document.getElementById('escrow-detail');
-            el.innerHTML = '<p class="pp-hint text-sm">Cargando…</p>';
+            el.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
             const job = await api(`/escrow-jobs/${id}`);
             el.innerHTML = `
                 <h1 class="font-mono text-lg font-bold">#ESC-${job.id.slice(0, 8).toUpperCase()}</h1>
@@ -347,35 +363,35 @@
                 <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats <span class="pp-hint">+ ${Number(job.fee_sats).toLocaleString()} comisión</span></p>
                 ${job.status === 'created' ? `
                     <div class="pp-card mt-4 rounded-xl p-4">
-                        <p class="pp-hint text-xs font-medium">Factura para financiar el escrow</p>
+                        <p class="pp-hint text-xs font-medium">${t('escrow_funding_invoice')}</p>
                         <p class="mt-1 break-all font-mono text-xs">${job.funding_invoice}</p>
-                        <button id="copy-invoice" class="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium">Copiar</button>
+                        <button id="copy-invoice" class="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium">${t('escrow_copy')}</button>
                     </div>` : ''}
                 ${['funded', 'in_progress'].includes(job.status) ? `
                     <div class="mt-4 space-y-3">
                         <div class="pp-card rounded-xl p-4">
-                            <p class="text-sm font-semibold">Liberar fondos al freelancer</p>
-                            <textarea id="release-bolt11" rows="2" placeholder="Factura bolt11 del freelancer" class="mt-2 w-full rounded-lg border-slate-300 font-mono text-xs"></textarea>
-                            <button id="release-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">Liberar</button>
+                            <p class="text-sm font-semibold">${t('escrow_release_title')}</p>
+                            <textarea id="release-bolt11" rows="2" placeholder="${t('escrow_release_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 font-mono text-xs"></textarea>
+                            <button id="release-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_release')}</button>
                         </div>
                         <div class="pp-card rounded-xl p-4">
-                            <p class="text-sm font-semibold text-rose-600">Abrir disputa</p>
-                            <textarea id="dispute-reason" rows="2" placeholder="Motivo de la disputa" class="mt-2 w-full rounded-lg border-slate-300 text-xs"></textarea>
-                            <button id="dispute-btn" class="mt-2 w-full rounded-lg border border-rose-300 py-2 text-sm font-semibold text-rose-600">Abrir disputa</button>
+                            <p class="text-sm font-semibold text-rose-600">${t('escrow_dispute_title')}</p>
+                            <textarea id="dispute-reason" rows="2" placeholder="${t('escrow_dispute_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 text-xs"></textarea>
+                            <button id="dispute-btn" class="mt-2 w-full rounded-lg border border-rose-300 py-2 text-sm font-semibold text-rose-600">${t('escrow_dispute')}</button>
                         </div>
                     </div>` : ''}
                 <p id="escrow-detail-error" class="mt-3 hidden text-sm text-rose-600"></p>`;
 
             document.getElementById('copy-invoice')?.addEventListener('click', () => {
                 navigator.clipboard?.writeText(job.funding_invoice);
-                tg.showAlert('Factura copiada.');
+                tg.showAlert(t('escrow_copied'));
             });
             document.getElementById('release-btn')?.addEventListener('click', async () => {
                 const bolt11 = document.getElementById('release-bolt11').value.trim();
                 if (!bolt11) return;
                 try {
                     await api(`/escrow-jobs/${id}/release`, { method: 'POST', body: JSON.stringify({ payout_bolt11: bolt11 }) });
-                    tg.showAlert('Fondos liberados.');
+                    tg.showAlert(t('escrow_released'));
                     showEscrowDetail(id);
                 } catch (e) {
                     const err = document.getElementById('escrow-detail-error');
@@ -388,7 +404,7 @@
                 if (!reason) return;
                 try {
                     await api(`/escrow-jobs/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) });
-                    tg.showAlert('Disputa abierta. Un admin la revisará pronto.');
+                    tg.showAlert(t('escrow_dispute_opened'));
                     showEscrowDetail(id);
                 } catch (e) {
                     const err = document.getElementById('escrow-detail-error');
@@ -401,20 +417,20 @@
         // --- Mempool ------------------------------------------------
         async function loadMempool() {
             const el = document.getElementById('mempool-content');
-            el.innerHTML = '<p class="pp-hint text-sm">Cargando…</p>';
+            el.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
             try {
                 const stats = await api('/mempool');
                 el.innerHTML = `
                     <div class="pp-card rounded-xl p-4 shadow-sm">
-                        <p class="pp-hint text-xs font-medium">Altura de bloque</p>
+                        <p class="pp-hint text-xs font-medium">${t('mempool_block_height')}</p>
                         <p class="font-mono text-2xl font-bold">${stats.height.toLocaleString()}</p>
                     </div>
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         ${[
-                            ['🚀 Próximo bloque', stats.fees.fastestFee],
-                            ['⏱️ ~30 min', stats.fees.halfHourFee],
-                            ['🕐 ~1 hora', stats.fees.hourFee],
-                            ['🐢 Económica', stats.fees.economyFee],
+                            [t('mempool_next_block'), stats.fees.fastestFee],
+                            [t('mempool_half_hour'), stats.fees.halfHourFee],
+                            [t('mempool_one_hour'), stats.fees.hourFee],
+                            [t('mempool_economy'), stats.fees.economyFee],
                         ].map(([label, val]) => `
                             <div class="pp-card rounded-xl p-4 shadow-sm">
                                 <p class="pp-hint text-xs">${label}</p>

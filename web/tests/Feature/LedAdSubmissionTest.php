@@ -26,6 +26,10 @@ class LedAdSubmissionTest extends TestCase
 
     public function test_form_page_renders(): void
     {
+        // Explicit locale: assertions below check Spanish copy, independent
+        // of whatever APP_LOCALE the running environment happens to have.
+        app()->setLocale('es');
+
         $this->get('/anunciar')->assertOk()->assertSee('¿Tu comercio acepta Bitcoin?');
     }
 

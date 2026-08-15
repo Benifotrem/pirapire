@@ -6,11 +6,15 @@ use App\Http\Controllers\Auth\StaffTelegramAuthController;
 use App\Http\Controllers\Auth\TelegramLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LedAdSubmissionController;
+use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+// Public-site language switch (English/Spanish) — see App\Http\Middleware\SetLocale.
+Route::get('/lang/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
 
 // Self-service form for the header LED ticker's placeholder ad — see
 // App\Http\Controllers\LedAdSubmissionController. Submissions land as
