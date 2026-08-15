@@ -171,7 +171,7 @@ class PollP2POffersTest extends TestCase
         Queue::assertPushed(SendP2POfferAlert::class, function (SendP2POfferAlert $job) use ($customer) {
             return $job->telegramChatId === $customer->telegram_chat_id
                 && str_contains($job->message, 'Mostro')
-                && str_contains($job->message, 'mostro-cli takesell -o mostro-event-1');
+                && str_contains($job->message, 'mostro-cli takesell -o order-1');
         });
     }
 }

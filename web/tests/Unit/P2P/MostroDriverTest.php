@@ -5,6 +5,7 @@ namespace Tests\Unit\P2P;
 use App\Services\Nostr\NostrRelayClient;
 use App\Services\P2P\Drivers\MostroDriver;
 use Illuminate\Support\Facades\Log;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -77,15 +78,20 @@ class MostroDriverTest extends TestCase
 
         $offer = (new MostroDriver($relay))->fetchOffers('PYG')[0];
 
-        $this->assertSame('event-id-abc', $offer->id);
+        // The offer id is the stable "d" tag (the order's own id), not
+        // the Nostr event's own id — the latter changes every time
+        // Mostro republishes the order with a new status. See this
+        // class's docblock.
+        $this->assertSame('order-1', $offer->id);
         $this->assertSame('mostro', $offer->source);
         $this->assertSame('SELL', $offer->orderType);
         $this->assertSame('150000', $offer->fiatAmount);
         $this->assertSame('PYG', $offer->fiatCurrency);
         $this->assertNull($offer->estimatedSats); // amt=0 means market price
         $this->assertSame('PIX', $offer->paymentMethod);
+        // The link still uses the raw event id — that's what njump.me indexes.
         $this->assertSame('https://njump.me/event-id-abc', $offer->url);
-        $this->assertSame('mostro-cli takesell -o event-id-abc', $offer->actionCommand);
+        $this->assertSame('mostro-cli takesell -o order-1', $offer->actionCommand);
     }
 
     public function test_normalizes_a_buy_order_event_with_a_fixed_sats_amount(): void
@@ -99,7 +105,33 @@ class MostroDriverTest extends TestCase
 
         $this->assertSame('BUY', $offer->orderType);
         $this->assertSame(50000, $offer->estimatedSats);
-        $this->assertSame('mostro-cli takebuy -o event-id-abc', $offer->actionCommand);
+        $this->assertSame('mostro-cli takebuy -o order-1', $offer->actionCommand);
+    }
+
+    public function test_a_range_order_reports_a_min_max_fiat_amount(): void
+    {
+        // create_fiat_amt_array() in Mostro's own source emits a two-value
+        // "fa" tag (min, max) for a still-pending range order.
+        $relay = $this->createMock(NostrRelayClient::class);
+        $relay->method('fetchEvents')->willReturn([
+            $this->event([['fa', '50000', '200000']]),
+        ]);
+
+        $offer = (new MostroDriver($relay))->fetchOffers('PYG')[0];
+
+        $this->assertSame('50000-200000', $offer->fiatAmount);
+    }
+
+    public function test_multiple_payment_methods_are_joined(): void
+    {
+        $relay = $this->createMock(NostrRelayClient::class);
+        $relay->method('fetchEvents')->willReturn([
+            $this->event([['pm', 'PIX', 'Bank transfer']]),
+        ]);
+
+        $offer = (new MostroDriver($relay))->fetchOffers('PYG')[0];
+
+        $this->assertSame('PIX, Bank transfer', $offer->paymentMethod);
     }
 
     public function test_parses_the_expiration_tag(): void
@@ -123,12 +155,42 @@ class MostroDriverTest extends TestCase
         $this->assertSame([], (new MostroDriver($relay))->fetchOffers('PYG'));
     }
 
-    public function test_filters_out_non_open_statuses(): void
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function nonOpenStatuses(): array
+    {
+        // mostro_core::order::Status has ~18 variants; only "pending"
+        // means "still open for someone to take" — everything else is
+        // mid-trade or finished and shouldn't show up as an offer.
+        return [
+            'completed' => ['completed'],
+            'in-progress' => ['in-progress'],
+            'active' => ['active'], // not "still open" despite the name — see this class's docblock
+            'waiting-payment' => ['waiting-payment'],
+        ];
+    }
+
+    #[DataProvider('nonOpenStatuses')]
+    public function test_filters_out_non_open_statuses(string $status): void
     {
         $relay = $this->createMock(NostrRelayClient::class);
-        $relay->method('fetchEvents')->willReturn([$this->event([['s', 'completed']])]);
+        $relay->method('fetchEvents')->willReturn([$this->event([['s', $status]])]);
 
         $this->assertSame([], (new MostroDriver($relay))->fetchOffers('PYG'));
+    }
+
+    public function test_skips_events_missing_the_d_tag_instead_of_erroring(): void
+    {
+        $relay = $this->createMock(NostrRelayClient::class);
+        $relay->method('fetchEvents')->willReturn([
+            ['id' => 'event-without-d-tag', 'tags' => [['f', 'PYG'], ['s', 'pending']]], // no 'd'
+            $this->event(),
+        ]);
+
+        $offers = (new MostroDriver($relay))->fetchOffers('PYG');
+
+        $this->assertCount(1, $offers);
     }
 
     public function test_skips_events_missing_an_id_instead_of_erroring(): void
