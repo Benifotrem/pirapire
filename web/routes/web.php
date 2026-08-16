@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\StaffTelegramAuthController;
 use App\Http\Controllers\Auth\TelegramLinkController;
 use App\Http\Controllers\CustomerTelegramLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EscrowDashboardController;
 use App\Http\Controllers\LedAdSubmissionController;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
@@ -60,6 +61,19 @@ Route::middleware('auth:customer')->group(function () {
     // and TelegramCustomerWebhookController's "/vincular CODE" handling.
     Route::get('/dashboard/link-telegram', [CustomerTelegramLinkController::class, 'show'])->name('customer-link-telegram');
     Route::get('/dashboard/link-telegram/status/{code}', [CustomerTelegramLinkController::class, 'status'])->name('customer-telegram-link.status');
+
+    // The job board — same App\Services\Escrow\EscrowService and escrow_jobs
+    // rows behind the Telegram bot's /escrow commands and the Mini App
+    // (App\Http\Controllers\MiniApp\CustomerController); this is a third,
+    // plain-browser front end onto the same one job board, not a separate one.
+    Route::get('/dashboard/escrow', [EscrowDashboardController::class, 'board'])->name('escrow.board');
+    Route::post('/dashboard/escrow/jobs', [EscrowDashboardController::class, 'store'])->name('escrow.store');
+    Route::post('/dashboard/escrow/jobs/{job}/cancel', [EscrowDashboardController::class, 'cancel'])->name('escrow.cancel');
+    Route::post('/dashboard/escrow/jobs/{job}/apply', [EscrowDashboardController::class, 'apply'])->name('escrow.apply');
+    Route::post('/dashboard/escrow/jobs/{job}/applications/{application}/accept', [EscrowDashboardController::class, 'accept'])->name('escrow.accept');
+    Route::post('/dashboard/escrow/jobs/{job}/deliver', [EscrowDashboardController::class, 'deliver'])->name('escrow.deliver');
+    Route::post('/dashboard/escrow/jobs/{job}/release', [EscrowDashboardController::class, 'release'])->name('escrow.release');
+    Route::post('/dashboard/escrow/jobs/{job}/dispute', [EscrowDashboardController::class, 'dispute'])->name('escrow.dispute');
 });
 
 // Lightning-wallet login for the Filament admin panel (App\Models\User).

@@ -116,8 +116,11 @@
 
         {{-- Escrow contracts ------------------------------------------------ --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 class="text-lg font-semibold text-slate-900">{{ __('site.dashboard.escrow_title') }}</h2>
-            <p class="mt-1 text-xs text-slate-400">{!! __('site.dashboard.escrow_subtitle', ['command' => '<code class="font-mono">/escrow create</code>']) !!}</p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold text-slate-900">{{ __('site.dashboard.escrow_title') }}</h2>
+                <a href="{{ route('escrow.board') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-700">{{ __('site.dashboard.escrow_cta') }}</a>
+            </div>
+            <p class="mt-1 text-xs text-slate-400">{{ __('site.dashboard.escrow_subtitle') }}</p>
 
             <div class="mt-4 divide-y divide-slate-100">
                 @forelse ($escrowJobs as $job)
