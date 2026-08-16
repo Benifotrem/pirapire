@@ -46,6 +46,7 @@ class EscrowFullLifecycleTest extends TestCase
     public function test_full_happy_path_release_flow(): void
     {
         $this->fakeLnbitsWallet();
+        config(['services.escrow.fee_percent' => 1.5]);
         $client = Customer::factory()->create();
         $freelancer = Customer::factory()->create();
         $escrow = app(EscrowService::class);

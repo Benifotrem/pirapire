@@ -53,7 +53,9 @@ return [
     ],
 
     'escrow' => [
-        'fee_percent' => env('ESCROW_FEE_PERCENT', 1.5),
+        // 0% while the platform is in its community/validation phase —
+        // see README "Fase actual: comisión 0%".
+        'fee_percent' => env('ESCROW_FEE_PERCENT', 0.0),
     ],
 
     /*

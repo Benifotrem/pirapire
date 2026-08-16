@@ -27,6 +27,7 @@ class EscrowServiceTest extends TestCase
 
     public function test_post_job_creates_an_open_job_with_no_invoice_yet(): void
     {
+        config(['services.escrow.fee_percent' => 1.5]);
         $service = new EscrowService(Mockery::mock(LnbitsClient::class));
         $customer = Customer::factory()->create();
 

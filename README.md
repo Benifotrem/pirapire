@@ -114,7 +114,7 @@ assigned → cancelled (nunca se fondeó, expiró)
 
 - **`open`**: el cliente publica el trabajo (`postJob()`) — monto y descripción, sin factura todavía, porque no hay nada que fondear hasta que alguien vaya a hacer el trabajo.
 - Los freelancers ven los trabajos abiertos y se postulan (`applyToJob()` → `EscrowJobApplication`, con un mensaje). Un freelancer no puede postularse a su propio trabajo.
-- El cliente revisa las postulaciones y elige una (`acceptApplication()`): recién ahí se asigna el freelancer (`counterparty_customer_id`) y se genera la factura de fondeo — una factura **normal** por `monto + comisión (1.5% por defecto)` vía `LnbitsClient::createInvoice()`. El resto de las postulaciones pendientes quedan rechazadas automáticamente. Estado: **`assigned`**.
+- El cliente revisa las postulaciones y elige una (`acceptApplication()`): recién ahí se asigna el freelancer (`counterparty_customer_id`) y se genera la factura de fondeo — una factura **normal** por `monto + comisión (0% en la fase actual, ver más abajo)` vía `LnbitsClient::createInvoice()`. El resto de las postulaciones pendientes quedan rechazadas automáticamente. Estado: **`assigned`**.
 - Cuando el cliente paga esa factura, liquida **de inmediato** en el wallet de LNbits de la plataforma — no queda un HTLC "retenido" esperando revelar un preimage (LNbits **no tiene extensión de "hold invoice"** — verificado contra el registro oficial `lnbits/lnbits-extensions`, no existe; el diseño original de este proyecto asumía lo contrario). `markFunded()` se dispara desde el webhook de LNbits (`POST /api/escrow/webhook`). Estado: **`funded`**, opcionalmente **`in_progress`**.
 - Cuando el freelancer termina, marca el trabajo como entregado y **sube su propia factura bolt11 de cobro en ese momento** (`deliver()`) — nunca se relaya un bolt11 por un chat externo, porque las facturas Lightning expiran y no se pueden generar de antemano. Estado: **`delivered`**.
 - El cliente libera el pago (`release()`), que paga automáticamente la factura que el freelancer ya dejó cargada — no hace falta que nadie vuelva a pedirla ni pegarla a mano. Paga `amount_sats` (la comisión queda en el wallet de la plataforma). Estado: **`completed`**.
@@ -128,6 +128,22 @@ assigned → cancelled (nunca se fondeó, expiró)
 **Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio (incluida la autorización de cada uno) contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `open → assigned → funded → in_progress → delivered → completed` y `open → ... → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`. `tests/Feature/TelegramCustomerWebhookTest.php` y `tests/Feature/MiniApp/CustomerMiniAppTest.php` cubren lo mismo desde cada interfaz, incluyendo los intentos de acceso de alguien que no es parte del trabajo.
 
 **Limitación conocida:** ningún cambio de estado (postulación recibida, freelancer aceptado, trabajo entregado) dispara un mensaje de Telegram al otro lado — cada parte se entera revisando la Mini App o corriendo `/escrow status`, `/escrow browse` o `/escrow applications` de nuevo. Agregar notificaciones activas (reusando `App\Services\Telegram\TelegramBotClient::sendMessage()`, igual que las alertas P2P) queda como mejora futura.
+
+### Fase actual: comisión 0%
+
+`ESCROW_FEE_PERCENT=0.0` (ver `web/.env.example` y `web/config/services.php`) — la plataforma no cobra comisión sobre los trabajos de escrow mientras dure esta fase de validación con la comunidad. Con la comisión en 0%, `calculateFee()` devuelve `0` y la factura de fondeo generada en `acceptApplication()` es exactamente por `amount_sats`, sin margen agregado — no hace falta ninguna lógica especial para esto, es el mismo cálculo que a cualquier otro porcentaje.
+
+Con la comisión en 0%, hoy el escrow es la **única** vía de ingresos del código de este repo (los anuncios LED se aprueban gratis vía `/anunciar`, y las suscripciones VIP se otorgan a mano desde Filament sin un flujo de pago implementado) — es decir, la plataforma no está recaudando nada por su cuenta en este momento.
+
+Consecuencia operativa a tener en cuenta: si LNbits/el backend Lightning cobra algún fee de ruteo al pagar `release()`/`refund()`, ese costo lo absorbe el wallet de la plataforma, porque no queda comisión retenida para cubrirlo (a diferencia de cuando la comisión es mayor a 0%, donde ese margen cubre esos fees solo). Vale la pena monitorear el saldo del wallet por esto mientras dure esta fase.
+
+> **Nota:** si están evaluando si esta fase de comisión 0% los exime de obligaciones de inscripción, facturación o tributación ante la DNIT (u otra autoridad paraguaya), esa es una determinación legal/tributaria que corresponde confirmar con un contador o abogado tributarista matriculado en Paraguay — no es algo que se pueda concluir a partir de un valor de configuración en el código. Este documento describe el comportamiento técnico del sistema, no asesora sobre su tratamiento fiscal.
+
+### Fase futura: comisión comercial
+
+Cuando el volumen transaccionado valide el modelo de negocio, la comisión se puede volver a activar cambiando `ESCROW_FEE_PERCENT` a un valor comercial (por ejemplo, `1.5`, el valor histórico de este proyecto) en `web/.env` y recreando el contenedor `web` — no requiere ningún cambio de código, es la misma variable que ya lee `EscrowService::feePercent()`.
+
+Ese paso normalmente vendría acompañado de formalizar la operación del lado del negocio — por ejemplo, constituir una sociedad (una EAS u otro tipo societario) que sea la titular de la infraestructura, el dominio y el cobro de comisiones, e inscribirse ante la DNIT para poder facturar y tributar los servicios tecnológicos que preste. Ese trabajo de constitución societaria, inscripción y cumplimiento tributario queda fuera del alcance de este repositorio — es una gestión legal/contable, no una tarea de ingeniería, y debería hacerse con asesoría profesional paraguaya antes (no después) de empezar a cobrar comisión de forma comercial.
 
 ## 4. Comandos de Telegram (bot de clientes)
 
@@ -355,7 +371,7 @@ Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para
 
 - `LNBITS_ADMIN_KEY`, `LNBITS_INVOICE_READ_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia el escrow.
 - `LNBITS_BACKEND_WALLET_CLASS` (`.env` raíz) + `BLINK_TOKEN`: backend real de LNbits en producción — ver "Desarrollo local" (FakeWallet vs. Blink) más abajo.
-- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
+- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow — `0.0` mientras dure la fase actual de validación con la comunidad (ver sección 3, "Fase actual: comisión 0%").
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET`: bot privado de administración — login admin por código y el handshake `/vincular` (sección 5).
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).

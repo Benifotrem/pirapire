@@ -19,27 +19,33 @@ use RuntimeException;
  */
 class CustomerCommandRouter
 {
-    private const USAGE = <<<'TEXT'
-        🔒 *Comandos de Escrow Lightning*
-
-        /escrow create <monto_sats> <descripción> — publica un trabajo (comisión 1.5%)
-        /escrow browse — ver trabajos abiertos para postularte
-        /escrow apply <id> <mensaje> — postularte a un trabajo abierto
-        /escrow applications <id> — ver postulaciones a tu trabajo
-        /escrow accept <id_trabajo> <id_postulación> — elegir un freelancer y financiar
-        /escrow deliver <id> <factura_bolt11> — marcar entregado y pedir el cobro
-        /escrow release <id> — liberar el pago al freelancer
-        /escrow dispute <id> [motivo] — abrir una disputa para que un admin resuelva
-        /escrow status <id> — consultar el estado de un trabajo
-        /escrow cancel <id> — cancelar un trabajo tuyo que aún no fue asignado
-        TEXT;
-
     private const LNBITS_DOWN_MESSAGE = '⚠️ El proveedor de pagos no está disponible en este momento. Probá de nuevo en unos minutos.';
 
     public function __construct(
         private readonly EscrowService $escrow,
         private readonly MempoolClient $mempool,
     ) {}
+
+    /** Built at call time (not a class const) so the fee shown always matches ESCROW_FEE_PERCENT, not whatever it was when this file was last edited. */
+    private function usage(): string
+    {
+        $fee = rtrim(rtrim(number_format($this->escrow->feePercent(), 2), '0'), '.');
+
+        return <<<TEXT
+            🔒 *Comandos de Escrow Lightning*
+
+            /escrow create <monto_sats> <descripción> — publica un trabajo (comisión {$fee}%)
+            /escrow browse — ver trabajos abiertos para postularte
+            /escrow apply <id> <mensaje> — postularte a un trabajo abierto
+            /escrow applications <id> — ver postulaciones a tu trabajo
+            /escrow accept <id_trabajo> <id_postulación> — elegir un freelancer y financiar
+            /escrow deliver <id> <factura_bolt11> — marcar entregado y pedir el cobro
+            /escrow release <id> — liberar el pago al freelancer
+            /escrow dispute <id> [motivo] — abrir una disputa para que un admin resuelva
+            /escrow status <id> — consultar el estado de un trabajo
+            /escrow cancel <id> — cancelar un trabajo tuyo que aún no fue asignado
+            TEXT;
+    }
 
     public function route(Customer $customer, string $text): ?string
     {
@@ -128,7 +134,7 @@ class CustomerCommandRouter
             'dispute' => $this->escrowDispute($customer, $rest),
             'status' => $this->escrowStatus($customer, $rest),
             'cancel' => $this->escrowCancel($customer, $rest),
-            default => self::USAGE,
+            default => $this->usage(),
         };
     }
 
@@ -174,7 +180,7 @@ class CustomerCommandRouter
         $description = trim(implode(' ', array_filter($descParts, fn ($part) => $part !== null)));
 
         if ($amountSats <= 0 || $description === '') {
-            return "Uso: /escrow create <monto_sats> <descripción>\n\n".self::USAGE;
+            return "Uso: /escrow create <monto_sats> <descripción>\n\n".$this->usage();
         }
 
         try {
@@ -225,7 +231,7 @@ class CustomerCommandRouter
         $message = trim(implode(' ', array_filter($parts, fn ($part) => $part !== null)));
 
         if (! $jobId || $message === '') {
-            return "Uso: /escrow apply <id> <mensaje>\n\n".self::USAGE;
+            return "Uso: /escrow apply <id> <mensaje>\n\n".$this->usage();
         }
 
         $job = EscrowJob::where('status', 'open')->find($jobId);
@@ -247,7 +253,7 @@ class CustomerCommandRouter
     {
         [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
-            return "Uso: /escrow applications <id>\n\n".self::USAGE;
+            return "Uso: /escrow applications <id>\n\n".$this->usage();
         }
 
         $job = $this->ownedJobOrNull($customer, $jobId);
@@ -276,7 +282,7 @@ class CustomerCommandRouter
     {
         [$jobId, $applicationId] = array_pad($rest, 2, null);
         if (! $jobId || ! $applicationId) {
-            return "Uso: /escrow accept <id_trabajo> <id_postulación>\n\n".self::USAGE;
+            return "Uso: /escrow accept <id_trabajo> <id_postulación>\n\n".$this->usage();
         }
 
         $job = $this->ownedJobOrNull($customer, $jobId);
@@ -311,7 +317,7 @@ class CustomerCommandRouter
     {
         [$jobId, $bolt11] = array_pad($rest, 2, null);
         if (! $jobId || ! $bolt11) {
-            return "Uso: /escrow deliver <id> <factura_bolt11>\n\n".self::USAGE;
+            return "Uso: /escrow deliver <id> <factura_bolt11>\n\n".$this->usage();
         }
 
         $job = $this->assignedJobOrNull($customer, $jobId);
@@ -333,7 +339,7 @@ class CustomerCommandRouter
     {
         [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
-            return "Uso: /escrow release <id>\n\n".self::USAGE;
+            return "Uso: /escrow release <id>\n\n".$this->usage();
         }
 
         $job = $this->ownedJobOrNull($customer, $jobId);
@@ -361,7 +367,7 @@ class CustomerCommandRouter
         $reason = $reason !== '' ? $reason : 'Disputa abierta desde Telegram';
 
         if (! $jobId) {
-            return "Uso: /escrow dispute <id> [motivo]\n\n".self::USAGE;
+            return "Uso: /escrow dispute <id> [motivo]\n\n".$this->usage();
         }
 
         $job = $this->partyJobOrNull($customer, $jobId);
@@ -383,7 +389,7 @@ class CustomerCommandRouter
     {
         [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
-            return "Uso: /escrow status <id>\n\n".self::USAGE;
+            return "Uso: /escrow status <id>\n\n".$this->usage();
         }
 
         $job = $this->partyJobOrNull($customer, $jobId);
@@ -403,7 +409,7 @@ class CustomerCommandRouter
     {
         [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
-            return "Uso: /escrow cancel <id>\n\n".self::USAGE;
+            return "Uso: /escrow cancel <id>\n\n".$this->usage();
         }
 
         $job = $this->ownedJobOrNull($customer, $jobId);

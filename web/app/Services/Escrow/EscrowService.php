@@ -48,7 +48,7 @@ class EscrowService
 
     public function feePercent(): float
     {
-        return (float) config('services.escrow.fee_percent', 1.5);
+        return (float) config('services.escrow.fee_percent', 0.0);
     }
 
     public function calculateFee(int $amountSats): int
