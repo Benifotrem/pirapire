@@ -2,8 +2,6 @@
     <a
         id="led-display"
         href="#"
-        target="_blank"
-        rel="noopener sponsored"
         class="mx-3 hidden h-[80%] flex-1 items-center overflow-hidden rounded-md border border-black bg-black px-4 sm:flex"
         style="box-shadow: inset 0 0 10px rgba(0,0,0,0.85);"
         data-mode="{{ $ledDisplay['color'] }}"
@@ -40,7 +38,14 @@
             const ad = ads[i % ads.length];
             i++;
 
+            // Each ad carries its own target/rel: an escrow job posting
+            // points at /dashboard/escrow and navigates in the same tab
+            // (target: '_self', set by LedDisplayComposer::openJobAds()),
+            // a sponsored ad opens externally in a new one — whichever ad
+            // is showing when the ticker gets clicked is the one followed.
             el.href = ad.url;
+            el.target = ad.target || '_blank';
+            el.rel = ad.target === '_self' ? '' : 'noopener sponsored';
             const [color, glow] = pickColor();
             textEl.style.color = color;
             textEl.style.textShadow = glow;

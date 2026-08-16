@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\EscrowJob;
 use App\Models\LedAd;
 use App\Models\LedDisplaySetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,5 +64,41 @@ class LedDisplayTest extends TestCase
         LedAd::factory()->create(['url' => 'https://example.com/promo', 'is_active' => true]);
 
         $this->get('/')->assertOk()->assertSee('https:\/\/example.com\/promo', false);
+    }
+
+    public function test_open_escrow_jobs_appear_in_the_ticker(): void
+    {
+        EscrowJob::factory()->create(['status' => 'open', 'counterparty_customer_id' => null, 'description' => 'Traducir un sitio web', 'amount_sats' => 5000]);
+
+        $response = $this->get('/')->assertOk();
+
+        $response->assertSee('id="led-display"', false);
+        $response->assertSee('Traducir un sitio web');
+        $response->assertSee('5,000 sats');
+    }
+
+    public function test_job_ads_are_hidden_when_the_ticker_is_disabled(): void
+    {
+        LedDisplaySetting::current()->update(['enabled' => false]);
+        EscrowJob::factory()->create(['status' => 'open', 'counterparty_customer_id' => null]);
+
+        $this->get('/')->assertOk()->assertDontSee('id="led-display"', false);
+    }
+
+    public function test_a_job_ad_links_to_the_escrow_board_and_opens_in_the_same_tab(): void
+    {
+        EscrowJob::factory()->create(['status' => 'open', 'counterparty_customer_id' => null]);
+
+        $response = $this->get('/')->assertOk();
+
+        $response->assertSee(str_replace('/', '\/', route('escrow.board')), false);
+        $response->assertSee('_self', false);
+    }
+
+    public function test_non_open_jobs_do_not_appear_in_the_ticker(): void
+    {
+        EscrowJob::factory()->create(['status' => 'completed']);
+
+        $this->get('/')->assertOk()->assertDontSee('id="led-display"', false);
     }
 }

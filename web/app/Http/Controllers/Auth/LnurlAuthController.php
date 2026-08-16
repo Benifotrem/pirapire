@@ -105,7 +105,11 @@ class LnurlAuthController extends Controller
         Auth::guard('customer')->login($customer, remember: true);
         $request->session()->regenerate();
 
-        return redirect()->route('dashboard');
+        // Falls back to the dashboard, but honors an intended URL stashed by
+        // the auth:customer middleware — e.g. a guest who clicked a job
+        // posting on the LED ticker and got bounced here to log in first
+        // lands back on /dashboard/escrow instead of the plain dashboard.
+        return redirect()->intended(route('dashboard'));
     }
 
     public function logout(Request $request): RedirectResponse
