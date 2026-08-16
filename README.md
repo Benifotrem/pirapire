@@ -281,12 +281,12 @@ cd web && npm install && npm run build   # compila Tailwind/Vite (public/build/m
 
 ### Cartel de anuncios LED
 
-Entre el logo y el botón de login, el header muestra un cartel estilo LED de los 90 (`resources/views/components/led-display.blade.php`) que rota mensajes publicitarios — cada uno con su propio enlace, que se abre en una pestaña nueva al hacer clic. Se administra completo desde Filament, sin tocar código:
+Entre el logo y el botón de login, el header muestra un cartel estilo LED de los 90 (`resources/views/components/led-display.blade.php`) que rota mensajes publicitarios — cada uno con su propio enlace y su propia forma de abrirlo, ver el siguiente párrafo. Los anuncios de comercios se administran completo desde Filament, sin tocar código:
 
-- **Anuncios LED** (`App\Filament\Resources\LedAdResource`): alta/baja de mensajes, enlace, orden del carrusel y activo/inactivo.
+- **Anuncios LED** (`App\Filament\Resources\LedAdResource`): alta/baja de mensajes, enlace, orden del carrusel y activo/inactivo. Estos abren su enlace en una pestaña nueva.
 - **Configuración del cartel** (`App\Filament\Pages\LedDisplaySettingsPage`): apagar el cartel entero, o elegir el color (rojo, verde, azul eléctrico, o mixto — aleatorio por anuncio).
 
-`App\View\Composers\LedDisplayComposer` inyecta los anuncios activos y el color configurado en cada página que extiende `layouts.app` (cacheado 30s vía `Cache::remember`, invalidado al instante al guardar cambios en el panel). Si no hay anuncios activos o el cartel está apagado, no se renderiza nada.
+`App\View\Composers\LedDisplayComposer` inyecta los anuncios activos, el color configurado, **y los trabajos de escrow abiertos** (ver sección 3, "Vidriera pública en el cartel LED") en cada página que extiende `layouts.app` (cacheado 30s vía `Cache::remember`, invalidado al instante al guardar cambios en el panel). Si no hay anuncios activos, no hay trabajos abiertos, y el cartel no está apagado por config, no se renderiza nada.
 
 **Alta de comercios, sin intervención manual del admin:** en `/anunciar` (`App\Http\Controllers\LedAdSubmissionController`) hay un formulario público pensado para comercios paraguayos que aceptan Bitcoin — nombre, rubro, ciudad, si acepta Lightning/on-chain, el mensaje y enlace para el cartel, y datos de contacto (estos últimos no se publican). Cada envío queda `pending` en **Solicitudes de comercios** (`App\Filament\Resources\LedAdSubmissionResource`, con badge de pendientes en el menú) hasta que un admin lo revisa: **Aprobar** deja editar el mensaje/enlace antes de confirmar y crea el `LedAd` correspondiente; **Rechazar** solo lo descarta, con una nota opcional. Nada llega al cartel público sin pasar por esa revisión.
 
@@ -306,7 +306,7 @@ pirapire/
 ├── web/                            # Laravel 11 + FilamentPHP v3 (toda la plataforma)
 │   ├── app/Services/Lnurl/         # LNURL-auth (Bech32, verificación de firma)
 │   ├── app/Services/Lightning/     # Cliente LNbits
-│   ├── app/Services/Escrow/        # Máquina de estados del escrow
+│   ├── app/Services/Escrow/        # Máquina de estados del escrow + almacenamiento de pruebas de entrega
 │   ├── app/Services/Telegram/      # Clientes de las dos Bot API (admin y clientes)
 │   ├── app/Services/RoboSats/      # Cliente HTTP del order book de RoboSats
 │   ├── app/Services/Nostr/         # Cliente de relays Nostr (usado por el driver de Mostro)
@@ -318,10 +318,11 @@ pirapire/
 │   ├── app/Console/Commands/       # p2p:poll (scheduler)
 │   ├── app/Jobs/                   # SendP2POfferAlert (cola, con delay para el plan gratuito)
 │   ├── app/Filament/Resources/     # Panel de administración
-│   ├── app/Http/Controllers/       # Webhooks de Telegram (admin y clientes), escrow
+│   ├── app/Http/Controllers/       # Webhooks de Telegram (admin y clientes), vinculación, escrow (dashboard web)
 │   ├── app/Http/Controllers/MiniApp/  # API JSON detrás de las dos Mini Apps
 │   ├── app/Http/Middleware/        # Auth de Mini App (valida initData de Telegram)
 │   ├── resources/views/miniapp/    # Las dos Mini Apps (clientes y admin)
+│   ├── resources/views/escrow/     # Tablón de trabajos en el dashboard web (tercer front end del escrow)
 │   └── routes/{web,api,console}.php
 ├── docker/                # Configuración de nginx
 ├── docker-compose.yml
@@ -381,6 +382,35 @@ Son **dos** archivos `.env` distintos, cada uno con un rol distinto:
 ```bash
 cd web && php artisan test          # requiere ext-gmp o ext-bcmath (verificación LNURL-auth)
 ```
+
+Antes de cualquier deploy con cambios de UI, además de correr `php artisan test` conviene ejecutar Pint (`./vendor/bin/pint --test`) y, si el cambio toca vistas, un smoke test manual en navegador — los tests automatizados cubren lógica y autorización, pero no detectan un CSS mal compilado o un botón mal alineado. Migraciones nuevas conviene además probarlas contra Postgres real, no solo SQLite (ver más abajo), porque algo de SQL válido en SQLite puede no serlo en Postgres.
+
+**Smoke test manual sin billetera real ni sats:** para revisar visualmente el dashboard, el tablón de escrow o la Mini App sin depender de una billetera Lightning de verdad, se puede completar el login LNURL-auth con el mismo truco que usan los tests (`tests/Feature/StaffLnurlAuthTest.php`, `tests/Feature/LnurlAuthTest.php`): marcar el desafío como autenticado directamente vía `LnurlAuthService::markAuthenticated()`, sin pasar por la verificación de firma real.
+
+```bash
+php artisan serve --port=8010 &
+
+# 1. Pedí /login para que el servidor genere sesión + k1, y sacá el sessionId de la respuesta
+curl -sS -c cookies.txt -b cookies.txt http://127.0.0.1:8010/login -o login.html
+SESSION_ID=$(grep -o 'sessionId = "[^"]*"' login.html | cut -d'"' -f2)
+
+# 2. Buscá el k1 de esa sesión y marcala autenticada con la linking_key de un Customer existente
+php artisan tinker --execute="
+    \$service = app(\App\Services\Lnurl\LnurlAuthService::class);
+    \$k1 = \$service->getSession('$SESSION_ID')['k1'];
+    \$service->markAuthenticated(\$k1, 'linking-key-del-customer');
+"
+
+# 3. Completá el login con la misma cookie — queda logueado en el navegador que la use
+XSRF=$(python3 -c "import urllib.parse,sys; print(urllib.parse.unquote(sys.argv[1]))" \
+    "$(grep XSRF-TOKEN cookies.txt | awk '{print $7}')")
+curl -sS -c cookies.txt -b cookies.txt -X POST http://127.0.0.1:8010/lnurl-auth/complete \
+    -H "X-XSRF-TOKEN: $XSRF"
+```
+
+Las cookies de `cookies.txt` (`laravel_session`, `XSRF-TOKEN`) se pueden cargar en un navegador real o en un script de Playwright (`context.addCookies(...)`) para navegar autenticado. Esto cubre todo salvo el pago real de una factura — para eso no hay atajo, hace falta LNbits configurado y sats de verdad (o `FakeWallet`, ver "Desarrollo local" arriba).
+
+Recordatorio si se usa este método: `npm run build` tiene que haber corrido con las vistas actuales antes de mirar el resultado — un `public/build` viejo puede faltarle clases de Tailwind que una vista reciente introdujo (pasó una vez: `bg-sky-100`/`text-sky-700` en `escrow/board.blade.php` no aparecían hasta reconstruir). En el VPS esto no es un problema porque el `Dockerfile` corre `npm run build` de cero en cada `docker compose build`.
 
 ## Variables de entorno clave
 
