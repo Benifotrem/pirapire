@@ -134,6 +134,11 @@
                         @endif
 
                         @if ($job->status === 'delivered')
+                            @if ($job->proof_path)
+                                <a href="{{ route('escrow.proof', $job) }}" target="_blank" class="mt-3 inline-block text-xs font-semibold text-blue-600 hover:text-blue-700">
+                                    {{ __('site.escrow_board.view_proof') }} →
+                                </a>
+                            @endif
                             <form method="POST" action="{{ route('escrow.release', $job) }}" class="mt-3">
                                 @csrf
                                 <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700">
@@ -182,14 +187,24 @@
                             <div class="mt-3 rounded-lg bg-slate-50 p-3">
                                 <p class="text-xs font-semibold text-slate-500">{{ __('site.escrow_board.deliver_title') }}</p>
                                 <p class="mt-1 text-xs text-slate-400">{{ __('site.escrow_board.deliver_help') }}</p>
-                                <form method="POST" action="{{ route('escrow.deliver', $job) }}" class="mt-2 flex gap-2">
+                                <form method="POST" action="{{ route('escrow.deliver', $job) }}" enctype="multipart/form-data" class="mt-2 space-y-2">
                                     @csrf
                                     <input type="text" name="payout_bolt11" placeholder="lnbc..." required class="w-full rounded-lg border-slate-300 font-mono text-xs focus:border-blue-500 focus:ring-blue-500">
-                                    <button type="submit" class="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700">
+                                    <div>
+                                        <label class="block text-xs text-slate-500">{{ __('site.escrow_board.proof_label') }}</label>
+                                        <input type="file" name="proof" accept="image/*" class="mt-1 w-full text-xs">
+                                    </div>
+                                    <button type="submit" class="w-full rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700">
                                         {{ __('site.escrow_board.deliver_cta') }}
                                     </button>
                                 </form>
                             </div>
+                        @endif
+
+                        @if (in_array($job->status, ['delivered', 'completed']) && $job->proof_path)
+                            <a href="{{ route('escrow.proof', $job) }}" target="_blank" class="mt-3 inline-block text-xs font-semibold text-blue-600 hover:text-blue-700">
+                                {{ __('site.escrow_board.view_proof') }} →
+                            </a>
                         @endif
 
                         @if (in_array($job->status, ['funded', 'in_progress', 'delivered']))

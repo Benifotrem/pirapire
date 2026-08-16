@@ -7,12 +7,14 @@ use App\Models\Alert;
 use App\Models\Customer;
 use App\Models\EscrowJob;
 use App\Models\EscrowJobApplication;
+use App\Services\Escrow\EscrowProofStorage;
 use App\Services\Escrow\EscrowService;
 use App\Services\Mempool\MempoolClient;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * JSON API behind the customer Mini App (resources/views/miniapp/customer.blade.php).
@@ -27,6 +29,7 @@ class CustomerController extends Controller
     public function __construct(
         private readonly EscrowService $escrow,
         private readonly MempoolClient $mempool,
+        private readonly EscrowProofStorage $proofStorage,
     ) {}
 
     private function customer(Request $request): Customer
@@ -214,15 +217,33 @@ class CustomerController extends Controller
         $customer = $this->customer($request);
         abort_unless($job->counterparty_customer_id === $customer->id, 403);
 
-        $validated = $request->validate(['payout_bolt11' => 'required|string']);
+        $validated = $request->validate([
+            'payout_bolt11' => 'required|string',
+            'proof' => 'nullable|image|max:5120',
+        ]);
+
+        $proofPath = $request->hasFile('proof') ? $this->proofStorage->store($request->file('proof')) : null;
 
         try {
-            $this->escrow->deliver($job, $customer, $validated['payout_bolt11']);
+            $this->escrow->deliver($job, $customer, $validated['payout_bolt11'], $proofPath);
         } catch (DomainException $e) {
+            if ($proofPath) {
+                $this->proofStorage->delete($proofPath);
+            }
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return response()->json($job->fresh());
+    }
+
+    /** Only the job's creator or its assigned freelancer may view the delivery proof. */
+    public function escrowJobProof(Request $request, EscrowJob $job): StreamedResponse
+    {
+        $this->abortUnlessParty($request, $job);
+        abort_unless((bool) $job->proof_path, 404);
+
+        return $this->proofStorage->response($job->proof_path);
     }
 
     public function releaseEscrowJob(Request $request, EscrowJob $job): JsonResponse

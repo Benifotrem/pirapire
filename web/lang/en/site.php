@@ -90,6 +90,8 @@ return [
         'funding_invoice_title' => 'Funding invoice (pay to activate the job)',
         'deliver_title' => 'Mark as delivered',
         'deliver_help' => 'Paste the Lightning invoice (bolt11) where you want to get paid.',
+        'proof_label' => 'Proof (optional) — screenshot or other evidence',
+        'view_proof' => 'View attached proof',
         'deliver_cta' => 'Deliver',
         'release_cta' => 'Release payment to freelancer',
         'dispute_title' => 'Open a dispute',

@@ -96,6 +96,8 @@ return [
     'escrow_waiting_release' => 'You already delivered. Waiting for the client to release the payment.',
     'escrow_deliver_title' => 'Mark as delivered',
     'escrow_deliver_placeholder' => 'Your bolt11 invoice to get paid',
+    'escrow_proof_label' => 'Proof (optional) — screenshot or other evidence',
+    'escrow_loading_proof' => 'Loading attached proof…',
     'escrow_deliver_submit' => 'Mark delivered',
     'escrow_delivered' => 'You marked the job as delivered.',
 

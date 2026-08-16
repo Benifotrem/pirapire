@@ -226,17 +226,27 @@
         }
 
         async function api(path, options = {}) {
-            const res = await fetch('/api/miniapp/customer' + path, {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Telegram-Init-Data': tg.initData,
-                    ...(options.headers || {}),
-                },
-            });
+            // A FormData body (file uploads) must NOT get a manual
+            // Content-Type — the browser sets one with the right multipart
+            // boundary itself; forcing 'application/json' would break the
+            // upload silently.
+            const isFormData = options.body instanceof FormData;
+            const headers = { 'X-Telegram-Init-Data': tg.initData, ...(options.headers || {}) };
+            if (!isFormData) headers['Content-Type'] = 'application/json';
+
+            const res = await fetch('/api/miniapp/customer' + path, { ...options, headers });
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.message || t('error_generic'));
             return body;
+        }
+
+        /** Fetches an auth-gated image (the initData header an <img src> can't send) and returns a displayable blob: URL. */
+        async function fetchProofImageUrl(jobId) {
+            const res = await fetch(`/api/miniapp/customer/escrow-jobs/${jobId}/proof`, {
+                headers: { 'X-Telegram-Init-Data': tg.initData },
+            });
+            if (!res.ok) return null;
+            return URL.createObjectURL(await res.blob());
         }
 
         const panels = document.querySelectorAll('[data-panel]');
@@ -556,6 +566,7 @@
                 actionsHtml = `
                     <div class="pp-card mt-4 rounded-xl p-4">
                         <p class="text-sm font-semibold">${t('escrow_release_title')}</p>
+                        ${job.proof_path ? `<div id="proof-preview" class="mt-2"><p class="pp-hint text-xs">${t('escrow_loading_proof')}</p></div>` : ''}
                         <button id="release-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_release')}</button>
                     </div>` + disputeBlockHtml();
             } else if (role === 'freelancer' && job.status === 'assigned') {
@@ -565,10 +576,14 @@
                     <div class="pp-card mt-4 rounded-xl p-4">
                         <p class="text-sm font-semibold">${t('escrow_deliver_title')}</p>
                         <textarea id="deliver-bolt11" rows="2" placeholder="${t('escrow_deliver_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 font-mono text-xs"></textarea>
+                        <label class="pp-hint mt-2 block text-xs font-medium">${t('escrow_proof_label')}</label>
+                        <input type="file" id="deliver-proof" accept="image/*" class="mt-1 w-full text-xs">
                         <button id="deliver-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_deliver_submit')}</button>
                     </div>` + disputeBlockHtml();
             } else if (role === 'freelancer' && job.status === 'delivered') {
-                actionsHtml = `<p class="pp-hint mt-4 text-sm">${t('escrow_waiting_release')}</p>` + disputeBlockHtml();
+                actionsHtml = `<p class="pp-hint mt-4 text-sm">${t('escrow_waiting_release')}</p>` +
+                    (job.proof_path ? `<div id="proof-preview" class="pp-card mt-3 rounded-xl p-4"><p class="pp-hint text-xs">${t('escrow_loading_proof')}</p></div>` : '') +
+                    disputeBlockHtml();
             }
 
             el.innerHTML = `
@@ -578,6 +593,15 @@
                 <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats <span class="pp-hint">+ ${Number(job.fee_sats).toLocaleString()} comisión</span></p>
                 ${actionsHtml}
                 <p id="escrow-detail-error" class="mt-3 hidden text-sm text-rose-600"></p>`;
+
+            const proofContainer = document.getElementById('proof-preview');
+            if (proofContainer) {
+                fetchProofImageUrl(id).then((url) => {
+                    proofContainer.innerHTML = url
+                        ? `<a href="${url}" target="_blank"><img src="${url}" class="w-full rounded-lg" alt=""></a>`
+                        : `<p class="pp-hint text-xs">${t('error_generic')}</p>`;
+                });
+            }
 
             document.getElementById('copy-invoice')?.addEventListener('click', () => {
                 navigator.clipboard?.writeText(job.funding_invoice);
@@ -597,8 +621,17 @@
             document.getElementById('deliver-btn')?.addEventListener('click', async () => {
                 const bolt11 = document.getElementById('deliver-bolt11').value.trim();
                 if (!bolt11) return;
+                const proofFile = document.getElementById('deliver-proof')?.files?.[0];
                 try {
-                    await api(`/escrow-jobs/${id}/deliver`, { method: 'POST', body: JSON.stringify({ payout_bolt11: bolt11 }) });
+                    let body;
+                    if (proofFile) {
+                        body = new FormData();
+                        body.append('payout_bolt11', bolt11);
+                        body.append('proof', proofFile);
+                    } else {
+                        body = JSON.stringify({ payout_bolt11: bolt11 });
+                    }
+                    await api(`/escrow-jobs/${id}/deliver`, { method: 'POST', body });
                     tg.showAlert(t('escrow_delivered'));
                     showEscrowDetail(id, role);
                 } catch (e) {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\EscrowJob;
 use App\Models\EscrowJobApplication;
+use App\Services\Escrow\EscrowProofStorage;
 use App\Services\Escrow\EscrowService;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Web-dashboard counterpart to App\Http\Controllers\MiniApp\CustomerController —
@@ -24,7 +26,10 @@ use RuntimeException;
  */
 class EscrowDashboardController extends Controller
 {
-    public function __construct(private readonly EscrowService $escrow) {}
+    public function __construct(
+        private readonly EscrowService $escrow,
+        private readonly EscrowProofStorage $proofStorage,
+    ) {}
 
     private function customer(): Customer
     {
@@ -110,15 +115,34 @@ class EscrowDashboardController extends Controller
 
     public function deliver(Request $request, EscrowJob $job): RedirectResponse
     {
-        $validated = $request->validate(['payout_bolt11' => 'required|string']);
+        $validated = $request->validate([
+            'payout_bolt11' => 'required|string',
+            'proof' => 'nullable|image|max:5120',
+        ]);
+
+        $proofPath = $request->hasFile('proof') ? $this->proofStorage->store($request->file('proof')) : null;
 
         try {
-            $this->escrow->deliver($job, $this->customer(), $validated['payout_bolt11']);
+            $this->escrow->deliver($job, $this->customer(), $validated['payout_bolt11'], $proofPath);
         } catch (DomainException $e) {
+            if ($proofPath) {
+                $this->proofStorage->delete($proofPath);
+            }
+
             return back()->withErrors(['escrow' => $e->getMessage()]);
         }
 
         return back()->with('status', 'Trabajo marcado como entregado.');
+    }
+
+    /** Only the job's creator or its assigned freelancer may view the delivery proof. */
+    public function proof(EscrowJob $job): StreamedResponse
+    {
+        $customerId = $this->customer()->id;
+        abort_unless(in_array($customerId, [$job->creator_customer_id, $job->counterparty_customer_id], true), 403);
+        abort_unless((bool) $job->proof_path, 404);
+
+        return $this->proofStorage->response($job->proof_path);
     }
 
     public function release(EscrowJob $job): RedirectResponse

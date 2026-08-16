@@ -27,6 +27,7 @@ class EscrowJob extends Model
         'payment_hash',
         'payout_destination',
         'freelancer_payout_invoice',
+        'proof_path',
         'expires_at',
         'funded_at',
         'settled_at',

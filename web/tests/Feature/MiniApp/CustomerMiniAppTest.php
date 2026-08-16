@@ -8,7 +8,9 @@ use App\Models\EscrowJob;
 use App\Models\EscrowJobApplication;
 use App\Services\Lightning\LnbitsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -46,6 +48,17 @@ class CustomerMiniAppTest extends TestCase
     private function miniAppPost(string $uri, array $data = [], int $userId = 555111)
     {
         return $this->withHeaders(['X-Telegram-Init-Data' => $this->initDataFor($userId)])->postJson($uri, $data);
+    }
+
+    /** postJson() would serialize an UploadedFile into JSON text instead of uploading it — this sends a real multipart request. */
+    private function miniAppPostMultipart(string $uri, array $data = [], int $userId = 555111)
+    {
+        return $this->withHeaders(['X-Telegram-Init-Data' => $this->initDataFor($userId)])->post($uri, $data);
+    }
+
+    private function miniAppGetRaw(string $uri, int $userId = 555111)
+    {
+        return $this->withHeaders(['X-Telegram-Init-Data' => $this->initDataFor($userId)])->get($uri);
     }
 
     public function test_requests_without_valid_init_data_are_rejected(): void
@@ -253,6 +266,41 @@ class CustomerMiniAppTest extends TestCase
 
         $this->miniAppPost("/api/miniapp/customer/escrow-jobs/{$job->id}/deliver", ['payout_bolt11' => 'lnbc1stolenpayout'])
             ->assertStatus(403);
+    }
+
+    public function test_deliver_accepts_an_optional_proof_image(): void
+    {
+        Storage::fake('escrow-proofs');
+        $freelancer = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        $job = EscrowJob::factory()->create(['status' => 'funded', 'counterparty_customer_id' => $freelancer->id]);
+
+        $this->miniAppPostMultipart("/api/miniapp/customer/escrow-jobs/{$job->id}/deliver", [
+            'payout_bolt11' => 'lnbc1freelancerpayout',
+            'proof' => UploadedFile::fake()->image('screenshot.jpg'),
+        ])->assertOk();
+
+        $job->refresh();
+        $this->assertNotNull($job->proof_path);
+        Storage::disk('escrow-proofs')->assertExists($job->proof_path);
+    }
+
+    public function test_only_a_party_to_the_job_can_fetch_its_proof_image(): void
+    {
+        Storage::fake('escrow-proofs');
+        $creator = Customer::factory()->create(['telegram_chat_id' => '111111']);
+        $freelancer = Customer::factory()->create(['telegram_chat_id' => '222222']);
+        $intruder = Customer::factory()->create(['telegram_chat_id' => '333333']);
+        $proofPath = UploadedFile::fake()->image('screenshot.jpg')->store('proofs', 'escrow-proofs');
+        $job = EscrowJob::factory()->create([
+            'status' => 'delivered',
+            'creator_customer_id' => $creator->id,
+            'counterparty_customer_id' => $freelancer->id,
+            'proof_path' => $proofPath,
+        ]);
+
+        $this->miniAppGetRaw("/api/miniapp/customer/escrow-jobs/{$job->id}/proof", 111111)->assertOk();
+        $this->miniAppGetRaw("/api/miniapp/customer/escrow-jobs/{$job->id}/proof", 222222)->assertOk();
+        $this->miniAppGetRaw("/api/miniapp/customer/escrow-jobs/{$job->id}/proof", 333333)->assertForbidden();
     }
 
     public function test_my_freelance_jobs_lists_jobs_assigned_to_the_caller(): void

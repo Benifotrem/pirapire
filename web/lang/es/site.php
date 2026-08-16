@@ -90,6 +90,8 @@ return [
         'funding_invoice_title' => 'Factura de fondeo (pagar para activar el trabajo)',
         'deliver_title' => 'Marcar como entregado',
         'deliver_help' => 'Pegá la factura Lightning (bolt11) donde querés recibir el pago.',
+        'proof_label' => 'Prueba (opcional) — captura de pantalla u otra evidencia',
+        'view_proof' => 'Ver prueba adjunta',
         'deliver_cta' => 'Entregar',
         'release_cta' => 'Liberar pago al freelancer',
         'dispute_title' => 'Abrir una disputa',

@@ -47,6 +47,21 @@ return [
             'report' => false,
         ],
 
+        // Deliberately without 'serve' — the 'local' disk above has it, which
+        // auto-registers a public, unauthenticated GET /storage/{path} route
+        // (see `php artisan route:list`, route name storage.local). That's
+        // fine for disposable/public files, but escrow delivery proofs can
+        // contain whatever the freelancer's screenshot happened to capture,
+        // so they're only ever reachable through EscrowDashboardController::
+        // proof() / MiniApp\CustomerController::proof(), both of which check
+        // the requester is a party to that specific job before streaming it.
+        'escrow-proofs' => [
+            'driver' => 'local',
+            'root' => storage_path('app/escrow-proofs'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

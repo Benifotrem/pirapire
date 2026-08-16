@@ -96,6 +96,8 @@ return [
     'escrow_waiting_release' => 'Ya entregaste el trabajo. Esperando que el cliente libere el pago.',
     'escrow_deliver_title' => 'Marcar como entregado',
     'escrow_deliver_placeholder' => 'Tu factura bolt11 para cobrar',
+    'escrow_proof_label' => 'Prueba (opcional) — captura de pantalla u otra evidencia',
+    'escrow_loading_proof' => 'Cargando prueba adjunta…',
     'escrow_deliver_submit' => 'Marcar entregado',
     'escrow_delivered' => 'Marcaste el trabajo como entregado.',
 

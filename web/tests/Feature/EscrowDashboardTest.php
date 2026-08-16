@@ -7,6 +7,8 @@ use App\Models\EscrowJob;
 use App\Models\EscrowJobApplication;
 use App\Services\Lightning\LnbitsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class EscrowDashboardTest extends TestCase
@@ -140,6 +142,52 @@ class EscrowDashboardTest extends TestCase
         $job->refresh();
         $this->assertSame('delivered', $job->status);
         $this->assertSame('lnbc1freelancerpayout', $job->freelancer_payout_invoice);
+    }
+
+    public function test_assigned_freelancer_can_attach_a_proof_image_when_delivering(): void
+    {
+        Storage::fake('escrow-proofs');
+        $freelancer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create(['status' => 'funded', 'counterparty_customer_id' => $freelancer->id]);
+
+        $this->actingAs($freelancer, 'customer')
+            ->post(route('escrow.deliver', $job), [
+                'payout_bolt11' => 'lnbc1freelancerpayout',
+                'proof' => UploadedFile::fake()->image('screenshot.jpg'),
+            ])
+            ->assertRedirect();
+
+        $job->refresh();
+        $this->assertSame('delivered', $job->status);
+        $this->assertNotNull($job->proof_path);
+        Storage::disk('escrow-proofs')->assertExists($job->proof_path);
+    }
+
+    public function test_only_a_party_to_the_job_can_view_its_proof(): void
+    {
+        Storage::fake('escrow-proofs');
+        $creator = Customer::factory()->create();
+        $freelancer = Customer::factory()->create();
+        $intruder = Customer::factory()->create();
+        $proofPath = UploadedFile::fake()->image('screenshot.jpg')->store('proofs', 'escrow-proofs');
+        $job = EscrowJob::factory()->create([
+            'status' => 'delivered',
+            'creator_customer_id' => $creator->id,
+            'counterparty_customer_id' => $freelancer->id,
+            'proof_path' => $proofPath,
+        ]);
+
+        $this->actingAs($creator, 'customer')->get(route('escrow.proof', $job))->assertOk();
+        $this->actingAs($freelancer, 'customer')->get(route('escrow.proof', $job))->assertOk();
+        $this->actingAs($intruder, 'customer')->get(route('escrow.proof', $job))->assertForbidden();
+    }
+
+    public function test_viewing_proof_on_a_job_without_one_is_a_404(): void
+    {
+        $creator = Customer::factory()->create();
+        $job = EscrowJob::factory()->create(['status' => 'delivered', 'creator_customer_id' => $creator->id, 'proof_path' => null]);
+
+        $this->actingAs($creator, 'customer')->get(route('escrow.proof', $job))->assertNotFound();
     }
 
     public function test_creator_can_release_a_delivered_job(): void

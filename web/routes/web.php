@@ -72,6 +72,7 @@ Route::middleware('auth:customer')->group(function () {
     Route::post('/dashboard/escrow/jobs/{job}/apply', [EscrowDashboardController::class, 'apply'])->name('escrow.apply');
     Route::post('/dashboard/escrow/jobs/{job}/applications/{application}/accept', [EscrowDashboardController::class, 'accept'])->name('escrow.accept');
     Route::post('/dashboard/escrow/jobs/{job}/deliver', [EscrowDashboardController::class, 'deliver'])->name('escrow.deliver');
+    Route::get('/dashboard/escrow/jobs/{job}/proof', [EscrowDashboardController::class, 'proof'])->name('escrow.proof');
     Route::post('/dashboard/escrow/jobs/{job}/release', [EscrowDashboardController::class, 'release'])->name('escrow.release');
     Route::post('/dashboard/escrow/jobs/{job}/dispute', [EscrowDashboardController::class, 'dispute'])->name('escrow.dispute');
 });

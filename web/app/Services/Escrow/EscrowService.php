@@ -144,13 +144,23 @@ class EscrowService
         $job->update(['status' => 'in_progress']);
     }
 
-    /** The freelancer marks the job done and submits their own invoice to be paid out. */
-    public function deliver(EscrowJob $job, Customer $actingFreelancer, string $payoutBolt11): void
+    /**
+     * The freelancer marks the job done and submits their own invoice to be
+     * paid out. $proofPath is an optional stored-file path (e.g. a
+     * screenshot) the creator can review before release() — for jobs whose
+     * deliverable is evidence of an action taken (share a post, leave a
+     * review) rather than a file that would be sent some other way.
+     */
+    public function deliver(EscrowJob $job, Customer $actingFreelancer, string $payoutBolt11, ?string $proofPath = null): void
     {
         $this->assertFreelancer($job, $actingFreelancer);
         $this->assertStatus($job, ['funded', 'in_progress']);
 
-        $job->update(['status' => 'delivered', 'freelancer_payout_invoice' => $payoutBolt11]);
+        $job->update([
+            'status' => 'delivered',
+            'freelancer_payout_invoice' => $payoutBolt11,
+            'proof_path' => $proofPath ?? $job->proof_path,
+        ]);
     }
 
     /**

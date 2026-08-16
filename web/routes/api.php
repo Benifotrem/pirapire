@@ -47,6 +47,7 @@ Route::middleware('miniapp.customer')->prefix('miniapp/customer')->name('api.min
     Route::get('/escrow-jobs/{job}/applications', [MiniAppCustomerController::class, 'jobApplications'])->name('escrow.applications');
     Route::post('/escrow-jobs/{job}/applications/{application}/accept', [MiniAppCustomerController::class, 'acceptApplication'])->name('escrow.accept');
     Route::post('/escrow-jobs/{job}/deliver', [MiniAppCustomerController::class, 'deliverEscrowJob'])->name('escrow.deliver');
+    Route::get('/escrow-jobs/{job}/proof', [MiniAppCustomerController::class, 'escrowJobProof'])->name('escrow.proof');
     Route::post('/escrow-jobs/{job}/release', [MiniAppCustomerController::class, 'releaseEscrowJob'])->name('escrow.release');
     Route::post('/escrow-jobs/{job}/dispute', [MiniAppCustomerController::class, 'disputeEscrowJob'])->name('escrow.dispute');
 });

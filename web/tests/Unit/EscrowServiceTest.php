@@ -175,6 +175,28 @@ class EscrowServiceTest extends TestCase
         $this->assertSame('lnbc1freelancerpayout', $job->fresh()->freelancer_payout_invoice);
     }
 
+    public function test_deliver_stores_the_optional_proof_path(): void
+    {
+        $service = new EscrowService(Mockery::mock(LnbitsClient::class));
+        $freelancer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create(['status' => 'funded', 'counterparty_customer_id' => $freelancer->id]);
+
+        $service->deliver($job, $freelancer, 'lnbc1freelancerpayout', 'proofs/screenshot.jpg');
+
+        $this->assertSame('proofs/screenshot.jpg', $job->fresh()->proof_path);
+    }
+
+    public function test_deliver_without_a_proof_leaves_any_previous_proof_path_untouched(): void
+    {
+        $service = new EscrowService(Mockery::mock(LnbitsClient::class));
+        $freelancer = Customer::factory()->create();
+        $job = EscrowJob::factory()->create(['status' => 'funded', 'counterparty_customer_id' => $freelancer->id, 'proof_path' => 'proofs/old.jpg']);
+
+        $service->deliver($job, $freelancer, 'lnbc1freelancerpayout');
+
+        $this->assertSame('proofs/old.jpg', $job->fresh()->proof_path);
+    }
+
     public function test_release_requires_the_job_to_be_delivered_or_disputed(): void
     {
         $service = new EscrowService(Mockery::mock(LnbitsClient::class));
