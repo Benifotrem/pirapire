@@ -114,11 +114,26 @@ class CustomerCommandRouter
 
         return match ($subcommand) {
             'create' => $this->escrowCreate($customer, $rest),
-            'status' => $this->escrowStatus($rest),
-            'release' => $this->escrowRelease($rest),
+            'status' => $this->escrowStatus($customer, $rest),
+            'release' => $this->escrowRelease($customer, $rest),
             'dispute' => $this->escrowDispute($customer, $rest),
             default => self::USAGE,
         };
+    }
+
+    /**
+     * Finds a job and confirms the given customer is the one who created it.
+     * Returns null (and the caller should show the same generic "not found"
+     * message used for a missing id) for both a nonexistent job and one that
+     * belongs to someone else — telling those two cases apart would let a
+     * customer probe which job ids exist by trying /escrow status on ids
+     * that aren't theirs.
+     */
+    private function ownedJobOrNull(Customer $customer, ?string $jobId): ?EscrowJob
+    {
+        $job = $jobId ? EscrowJob::find($jobId) : null;
+
+        return $job && $job->creator_customer_id === $customer->id ? $job : null;
     }
 
     /** @param array<int, string|null> $rest */
@@ -155,14 +170,14 @@ class CustomerCommandRouter
     }
 
     /** @param array<int, string|null> $rest */
-    private function escrowStatus(array $rest): string
+    private function escrowStatus(Customer $customer, array $rest): string
     {
         [$jobId] = $rest;
         if (! $jobId) {
             return "Uso: /escrow status <id>\n\n".self::USAGE;
         }
 
-        $job = EscrowJob::find($jobId);
+        $job = $this->ownedJobOrNull($customer, $jobId);
         if (! $job) {
             return "⚠️ No se encontró el trabajo {$jobId}.";
         }
@@ -175,14 +190,14 @@ class CustomerCommandRouter
     }
 
     /** @param array<int, string|null> $rest */
-    private function escrowRelease(array $rest): string
+    private function escrowRelease(Customer $customer, array $rest): string
     {
         [$jobId, $payoutBolt11] = $rest;
         if (! $jobId || ! $payoutBolt11) {
             return "Uso: /escrow release <id> <factura_bolt11>\n\n".self::USAGE;
         }
 
-        $job = EscrowJob::find($jobId);
+        $job = $this->ownedJobOrNull($customer, $jobId);
         if (! $job) {
             return "⚠️ No se encontró el trabajo {$jobId}.";
         }
@@ -206,7 +221,7 @@ class CustomerCommandRouter
             return "Uso: /escrow dispute <id>\n\n".self::USAGE;
         }
 
-        $job = EscrowJob::find($jobId);
+        $job = $this->ownedJobOrNull($customer, $jobId);
         if (! $job) {
             return "⚠️ No se encontró el trabajo {$jobId}.";
         }

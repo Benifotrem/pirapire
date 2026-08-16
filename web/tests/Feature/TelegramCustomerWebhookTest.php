@@ -137,6 +137,56 @@ class TelegramCustomerWebhookTest extends TestCase
         $this->assertSame('completed', $job->fresh()->status);
     }
 
+    public function test_escrow_status_on_someone_elses_job_is_rejected(): void
+    {
+        $owner = Customer::factory()->create(['telegram_chat_id' => '555222']);
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $owner->id, 'status' => 'funded']);
+        Customer::factory()->create(['telegram_chat_id' => '555111']); // the one issuing the command
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) use ($job) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, (string) $job->id) && str_contains($msg, 'No se encontró')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => "/escrow status {$job->id}"])->assertOk();
+    }
+
+    public function test_escrow_release_on_someone_elses_job_is_rejected(): void
+    {
+        $owner = Customer::factory()->create(['telegram_chat_id' => '555222']);
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $owner->id, 'status' => 'funded']);
+        Customer::factory()->create(['telegram_chat_id' => '555111']); // the one issuing the command
+
+        $this->mock(LnbitsClient::class, fn ($mock) => $mock->shouldNotReceive('payInvoice'));
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'No se encontró')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => "/escrow release {$job->id} lnbc1stolenpayout"])
+            ->assertOk();
+
+        $this->assertSame('funded', $job->fresh()->status);
+    }
+
+    public function test_escrow_dispute_on_someone_elses_job_is_rejected(): void
+    {
+        $owner = Customer::factory()->create(['telegram_chat_id' => '555222']);
+        $job = EscrowJob::factory()->create(['creator_customer_id' => $owner->id, 'status' => 'funded']);
+        Customer::factory()->create(['telegram_chat_id' => '555111']); // the one issuing the command
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'No se encontró')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => "/escrow dispute {$job->id}"])->assertOk();
+
+        $this->assertSame('funded', $job->fresh()->status);
+        $this->assertDatabaseCount('escrow_disputes', 0);
+    }
+
     public function test_missing_message_entirely_is_ignored_without_error(): void
     {
         $this->mock(CustomerTelegramBotClient::class, fn ($mock) => $mock->shouldNotReceive('sendMessage'));
