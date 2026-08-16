@@ -15,6 +15,10 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+// Help center: step-by-step usage manual + FAQ, bilingual like the rest of
+// the public site — see lang/{es,en}/faq.php and resources/views/faq.blade.php.
+Route::get('/faq', fn () => view('faq'))->name('faq');
+
 // Public-site language switch (English/Spanish) — see App\Http\Middleware\SetLocale.
 Route::get('/lang/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
 

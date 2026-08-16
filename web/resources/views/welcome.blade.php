@@ -31,7 +31,7 @@
                 <a href="{{ route('login') }}" class="w-full rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-indigo-900/30 transition hover:opacity-90 sm:w-auto">
                     {{ __('site.welcome.cta_login') }}
                 </a>
-                <a href="#como-funciona" class="w-full rounded-xl border border-white/30 px-8 py-4 text-base font-semibold text-white transition hover:bg-white/10 sm:w-auto">
+                <a href="{{ route('faq') }}" class="w-full rounded-xl border border-white/30 px-8 py-4 text-base font-semibold text-white transition hover:bg-white/10 sm:w-auto">
                     {{ __('site.welcome.cta_how') }}
                 </a>
             </div>

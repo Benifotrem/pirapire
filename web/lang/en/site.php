@@ -6,6 +6,7 @@ return [
         'meta_title' => 'Pirapire.pro — Sovereign Bitcoin & Lightning for Paraguay',
         'meta_description' => 'RoboSats P2P alerts, Lightning Escrow for freelance work, and Mempool tools — with sovereign login via LNURL-auth.',
         'nav_panel' => 'Dashboard',
+        'nav_help' => 'Help',
         'nav_logout' => 'Log out',
         'nav_login' => 'Log in with Lightning',
         'footer_tagline' => 'Sovereign Bitcoin/Lightning platform for Paraguay.',

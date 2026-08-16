@@ -299,6 +299,15 @@ El sitio público y la Mini App de clientes son bilingües (español de Paraguay
 - Traducciones en `lang/es/site.php` y `lang/en/site.php` (landing, dashboard, login, formulario `/anunciar`) vía el helper `__()` en las vistas Blade; `lang/es/miniapp.php` y `lang/en/miniapp.php` para la Mini App de clientes, inyectadas al JS con `const T = @json(__('miniapp'))`.
 - `<x-language-switcher />` (botones ES/EN) está en el header de `layouts.app.blade.php`; la Mini App de clientes tiene su propio selector en el panel Inicio, que hace `fetch('/lang/xx')` y recarga la página.
 
+### Centro de ayuda (`/faq`)
+
+Página pública bilingüe (`resources/views/faq.blade.php`) con dos partes en la misma página, sin dependencias JS nuevas — solo `<details>` nativo y algunas líneas de JS vanilla, igual que el resto del sitio:
+
+- **Manual paso a paso**, con pestañas por tema (iniciar sesión, alertas P2P, vincular Telegram, contratar, trabajar y cobrar, comandos del bot) — cada una con pasos numerados y, cuando aplica, enlaces directos a la página correspondiente (`/login`, `/dashboard/escrow`, etc.).
+- **Preguntas frecuentes**, organizadas por categoría, con un buscador que filtra los `<details>` por su texto completo y los abre automáticamente si hay una sola coincidencia.
+
+Todo el contenido vive en `lang/es/faq.php` / `lang/en/faq.php` (arrays anidados — pasos, grupos de comandos, categorías de preguntas — no strings sueltos), así que agregar una pregunta o un paso nuevo es editar esos dos archivos, sin tocar la vista. Enlazada desde el header (visible en todo el sitio) y desde el botón "Cómo funciona" de la landing. Cobertura: `tests/Feature/FaqPageTest.php`.
+
 ## Estructura del repositorio
 
 ```

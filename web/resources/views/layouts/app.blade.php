@@ -20,6 +20,7 @@
                 <x-led-display :led-display="$ledDisplay ?? null" />
 
                 <nav class="flex items-center gap-3">
+                    <a href="{{ route('faq') }}" class="hidden text-sm font-medium text-slate-600 transition hover:text-blue-600 sm:inline">{{ __('site.layout.nav_help') }}</a>
                     <x-language-switcher />
 
                     @auth('customer')

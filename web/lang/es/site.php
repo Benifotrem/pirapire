@@ -6,6 +6,7 @@ return [
         'meta_title' => 'Pirapire.pro — Bitcoin & Lightning soberano para Paraguay',
         'meta_description' => 'Alertas P2P de RoboSats, Escrow Lightning para empleos y herramientas de Mempool — con login soberano vía LNURL-auth.',
         'nav_panel' => 'Panel',
+        'nav_help' => 'Ayuda',
         'nav_logout' => 'Cerrar sesión',
         'nav_login' => 'Iniciar sesión con Lightning',
         'footer_tagline' => 'Plataforma soberana Bitcoin/Lightning para Paraguay.',
