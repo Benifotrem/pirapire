@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -36,18 +37,21 @@ return new class extends Migration
         // (posted, taking applications, no freelancer yet), keeps
         // 'assigned' as the old 'created' slot, and adds 'delivered'
         // (freelancer submitted their payout invoice, awaiting release).
+        //
+        // This does NOT use enum()->change(): on Postgres that generates
+        // `ALTER COLUMN "status" TYPE varchar(255) CHECK (...)`, which
+        // Postgres rejects outright — a CHECK can't ride along inside an
+        // ALTER COLUMN TYPE clause, it needs its own ADD CONSTRAINT
+        // statement. Confirmed the hard way against production. Dropping
+        // the original enum's named CHECK constraint and switching to a
+        // plain string column sidesteps that; the valid-status set is
+        // enforced in EscrowService::assertStatus() (application-level),
+        // same as every other status transition already was.
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE escrow_jobs DROP CONSTRAINT IF EXISTS escrow_jobs_status_check');
+        }
         Schema::table('escrow_jobs', function (Blueprint $table) {
-            $table->enum('status', [
-                'open',         // posted, taking applications from freelancers
-                'assigned',     // freelancer picked, funding invoice generated, awaiting payment
-                'funded',       // funding invoice paid
-                'in_progress',  // freelancer marked work as started (optional step)
-                'delivered',    // freelancer marked work done and submitted their payout invoice
-                'completed',    // released to the freelancer
-                'disputed',     // creator or freelancer flagged it; an admin must resolve
-                'refunded',     // paid back to the client
-                'cancelled',    // expired or cancelled before assignment/funding
-            ])->default('open')->change();
+            $table->string('status')->default('open')->change();
         });
 
         Schema::create('escrow_job_applications', function (Blueprint $table) {
@@ -72,10 +76,11 @@ return new class extends Migration
     {
         Schema::dropIfExists('escrow_job_applications');
 
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE escrow_jobs DROP CONSTRAINT IF EXISTS escrow_jobs_status_check');
+        }
         Schema::table('escrow_jobs', function (Blueprint $table) {
-            $table->enum('status', [
-                'created', 'funded', 'in_progress', 'completed', 'disputed', 'refunded', 'cancelled',
-            ])->default('created')->change();
+            $table->string('status')->default('created')->change();
         });
 
         Schema::table('escrow_jobs', function (Blueprint $table) {
