@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Alert;
 use App\Models\Customer;
 use App\Models\EscrowJob;
+use App\Models\EscrowJobApplication;
 use App\Services\Escrow\EscrowService;
 use App\Services\Mempool\MempoolClient;
 use DomainException;
@@ -101,6 +102,7 @@ class CustomerController extends Controller
         return response()->json(['status' => 'deleted']);
     }
 
+    /** Jobs the current customer posted as a client. */
     public function escrowJobs(Request $request): JsonResponse
     {
         return response()->json(
@@ -108,11 +110,32 @@ class CustomerController extends Controller
         );
     }
 
+    /** Jobs the current customer is doing as a freelancer. */
+    public function myFreelanceJobs(Request $request): JsonResponse
+    {
+        return response()->json(
+            $this->customer($request)->escrowJobsAsFreelancer()->latest()->limit(50)->get(),
+        );
+    }
+
+    /** Open jobs available to apply to — everyone's except the current customer's own postings. */
+    public function openEscrowJobs(Request $request): JsonResponse
+    {
+        return response()->json(
+            EscrowJob::where('status', 'open')
+                ->where('creator_customer_id', '!=', $this->customer($request)->id)
+                ->latest()
+                ->limit(50)
+                ->get(),
+        );
+    }
+
+    /** Either party to the job — client or assigned freelancer — can view it. */
     public function showEscrowJob(Request $request, EscrowJob $job): JsonResponse
     {
-        abort_unless($job->creator_customer_id === $this->customer($request)->id, 403);
+        $this->abortUnlessParty($request, $job);
 
-        return response()->json($job);
+        return response()->json($job->load(['applications' => fn ($q) => $q->where('status', 'pending')]));
     }
 
     public function storeEscrowJob(Request $request): JsonResponse
@@ -123,24 +146,92 @@ class CustomerController extends Controller
         ]);
 
         try {
-            $job = $this->escrow->createJob($this->customer($request), $validated['amount_sats'], $validated['description']);
+            $job = $this->escrow->postJob($this->customer($request), $validated['amount_sats'], $validated['description']);
+        } catch (DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($job, 201);
+    }
+
+    public function cancelEscrowJob(Request $request, EscrowJob $job): JsonResponse
+    {
+        $customer = $this->customer($request);
+        abort_unless($job->creator_customer_id === $customer->id, 403);
+
+        try {
+            $this->escrow->cancelOpenJob($job, $customer);
+        } catch (DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($job->fresh());
+    }
+
+    /** A freelancer pitches themselves for an open job. */
+    public function applyToEscrowJob(Request $request, EscrowJob $job): JsonResponse
+    {
+        $validated = $request->validate(['message' => 'required|string|max:1000']);
+
+        try {
+            $application = $this->escrow->applyToJob($job, $this->customer($request), $validated['message']);
+        } catch (DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($application, 201);
+    }
+
+    /** The client reviews pending applications on their own job. */
+    public function jobApplications(Request $request, EscrowJob $job): JsonResponse
+    {
+        abort_unless($job->creator_customer_id === $this->customer($request)->id, 403);
+
+        return response()->json(
+            $job->applications()->where('status', 'pending')->with('freelancer:id,display_name')->get(),
+        );
+    }
+
+    /** The client picks one applicant — assigns them and generates the funding invoice. */
+    public function acceptApplication(Request $request, EscrowJob $job, EscrowJobApplication $application): JsonResponse
+    {
+        abort_unless($application->escrow_job_id === $job->id, 404);
+
+        try {
+            $job = $this->escrow->acceptApplication($application, $this->customer($request));
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (RuntimeException) {
             return response()->json(['message' => 'No se pudo contactar al proveedor de pagos. Probá de nuevo en unos minutos.'], 503);
         }
 
-        return response()->json($job, 201);
+        return response()->json($job);
     }
 
-    public function releaseEscrowJob(Request $request, EscrowJob $job): JsonResponse
+    /** The assigned freelancer marks the job done and submits their own payout invoice. */
+    public function deliverEscrowJob(Request $request, EscrowJob $job): JsonResponse
     {
-        abort_unless($job->creator_customer_id === $this->customer($request)->id, 403);
+        $customer = $this->customer($request);
+        abort_unless($job->counterparty_customer_id === $customer->id, 403);
 
         $validated = $request->validate(['payout_bolt11' => 'required|string']);
 
         try {
-            $this->escrow->release($job, $validated['payout_bolt11']);
+            $this->escrow->deliver($job, $customer, $validated['payout_bolt11']);
+        } catch (DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($job->fresh());
+    }
+
+    public function releaseEscrowJob(Request $request, EscrowJob $job): JsonResponse
+    {
+        $customer = $this->customer($request);
+        abort_unless($job->creator_customer_id === $customer->id, 403);
+
+        try {
+            $this->escrow->release($job, $customer);
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (RuntimeException) {
@@ -153,7 +244,7 @@ class CustomerController extends Controller
     public function disputeEscrowJob(Request $request, EscrowJob $job): JsonResponse
     {
         $customer = $this->customer($request);
-        abort_unless($job->creator_customer_id === $customer->id, 403);
+        $this->abortUnlessParty($request, $job);
 
         $validated = $request->validate(['reason' => 'required|string|max:1000']);
 
@@ -164,5 +255,11 @@ class CustomerController extends Controller
         }
 
         return response()->json($job->fresh());
+    }
+
+    private function abortUnlessParty(Request $request, EscrowJob $job): void
+    {
+        $customerId = $this->customer($request)->id;
+        abort_unless(in_array($customerId, [$job->creator_customer_id, $job->counterparty_customer_id], true), 403);
     }
 }

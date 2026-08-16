@@ -131,6 +131,10 @@
                 <h1 class="text-lg font-bold">{{ __('miniapp.escrow_title') }}</h1>
                 <button data-nav="escrow-nuevo" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">{{ __('miniapp.escrow_new') }}</button>
             </div>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+                <button data-nav="escrow-buscar" class="pp-card rounded-lg border py-2 text-xs font-semibold" style="border-color: var(--pp-hint)">{{ __('miniapp.escrow_browse') }}</button>
+                <button data-nav="escrow-freelance" class="pp-card rounded-lg border py-2 text-xs font-semibold" style="border-color: var(--pp-hint)">{{ __('miniapp.escrow_my_freelance') }}</button>
+            </div>
             <div id="escrow-list" class="mt-4 space-y-3"></div>
         </section>
 
@@ -147,6 +151,25 @@
                 </div>
                 <p id="escrow-form-error" class="hidden text-sm text-rose-600"></p>
             </form>
+        </section>
+
+        <section data-panel="escrow-buscar" class="hidden">
+            <h1 class="text-lg font-bold">{{ __('miniapp.escrow_open_title') }}</h1>
+            <div id="escrow-open-list" class="mt-4 space-y-3"></div>
+        </section>
+
+        <section data-panel="escrow-postular" class="hidden">
+            <h1 class="text-lg font-bold">{{ __('miniapp.escrow_apply_title') }}</h1>
+            <div id="escrow-apply-job" class="pp-card mt-3 rounded-xl p-4 shadow-sm"></div>
+            <form id="escrow-apply-form" class="mt-4 space-y-4">
+                <textarea name="message" required rows="4" placeholder="{{ __('miniapp.escrow_apply_message_placeholder') }}" class="pp-card w-full rounded-lg border-slate-300 text-sm"></textarea>
+                <p id="escrow-apply-form-error" class="hidden text-sm text-rose-600"></p>
+            </form>
+        </section>
+
+        <section data-panel="escrow-freelance" class="hidden">
+            <h1 class="text-lg font-bold">{{ __('miniapp.escrow_my_freelance_title') }}</h1>
+            <div id="escrow-freelance-list" class="mt-4 space-y-3"></div>
         </section>
 
         <section data-panel="escrow-detalle" class="hidden">
@@ -185,8 +208,9 @@
         app.classList.remove('hidden');
 
         const statusStyles = {
-            created: t('escrow_status_created'), funded: t('escrow_status_funded'), in_progress: t('escrow_status_in_progress'),
-            completed: t('escrow_status_completed'), disputed: t('escrow_status_disputed'), refunded: t('escrow_status_refunded'), cancelled: t('escrow_status_cancelled'),
+            open: t('escrow_status_open'), assigned: t('escrow_status_assigned'), funded: t('escrow_status_funded'), in_progress: t('escrow_status_in_progress'),
+            delivered: t('escrow_status_delivered'), completed: t('escrow_status_completed'), disputed: t('escrow_status_disputed'),
+            refunded: t('escrow_status_refunded'), cancelled: t('escrow_status_cancelled'),
         };
 
         async function api(path, options = {}) {
@@ -310,6 +334,12 @@
         }
 
         // --- Escrow -----------------------------------------------------
+        // Hiring, payment, and disputes all happen here — a client posts a
+        // job (open), freelancers apply, the client accepts one
+        // (assigned + funding invoice), the client pays (funded), the
+        // freelancer delivers with their own payout invoice (delivered),
+        // and the client releases it (completed). Either side can dispute
+        // from funded/in_progress/delivered.
         async function loadEscrowJobs() {
             const list = document.getElementById('escrow-list');
             list.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
@@ -320,20 +350,57 @@
             }
             list.innerHTML = '';
             jobs.forEach(job => {
-                const row = document.createElement('button');
-                row.className = 'pp-card block w-full rounded-xl p-4 text-left shadow-sm';
-                row.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="font-mono text-sm font-semibold">#ESC-${job.id.slice(0, 8).toUpperCase()}</p>
-                            <p class="pp-hint text-xs">${job.description}</p>
-                            <p class="mt-0.5 font-mono text-xs pp-hint">${Number(job.amount_sats).toLocaleString()} sats</p>
-                        </div>
-                        <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${statusStyles[job.status] ?? job.status}</span>
-                    </div>`;
-                row.addEventListener('click', () => showEscrowDetail(job.id));
+                const row = escrowJobRow(job);
+                row.addEventListener('click', () => showEscrowDetail(job.id, 'creator'));
                 list.appendChild(row);
             });
+        }
+
+        async function loadOpenJobs() {
+            const list = document.getElementById('escrow-open-list');
+            list.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
+            const jobs = await api('/escrow-jobs/open');
+            if (!jobs.length) {
+                list.innerHTML = `<p class="pp-hint text-sm">${t('escrow_open_empty')}</p>`;
+                return;
+            }
+            list.innerHTML = '';
+            jobs.forEach(job => {
+                const row = escrowJobRow(job, { showStatus: false });
+                row.addEventListener('click', () => showApplyForm(job));
+                list.appendChild(row);
+            });
+        }
+
+        async function loadFreelanceJobs() {
+            const list = document.getElementById('escrow-freelance-list');
+            list.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
+            const jobs = await api('/escrow-jobs/mine-as-freelancer');
+            if (!jobs.length) {
+                list.innerHTML = `<p class="pp-hint text-sm">${t('escrow_my_freelance_empty')}</p>`;
+                return;
+            }
+            list.innerHTML = '';
+            jobs.forEach(job => {
+                const row = escrowJobRow(job);
+                row.addEventListener('click', () => showEscrowDetail(job.id, 'freelancer'));
+                list.appendChild(row);
+            });
+        }
+
+        function escrowJobRow(job, { showStatus = true } = {}) {
+            const row = document.createElement('button');
+            row.className = 'pp-card block w-full rounded-xl p-4 text-left shadow-sm';
+            row.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-mono text-sm font-semibold">#ESC-${job.id.slice(0, 8).toUpperCase()}</p>
+                        <p class="pp-hint text-xs">${job.description}</p>
+                        <p class="mt-0.5 font-mono text-xs pp-hint">${Number(job.amount_sats).toLocaleString()} sats</p>
+                    </div>
+                    ${showStatus ? `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${statusStyles[job.status] ?? job.status}</span>` : ''}
+                </div>`;
+            return row;
         }
 
         function setupEscrowForm() {
@@ -348,9 +415,10 @@
                         body: JSON.stringify({ amount_sats: Number(data.amount_sats), description: data.description }),
                     });
                     tg.MainButton.hideProgress();
+                    tg.showAlert(t('escrow_created_body'));
                     history.pop();
                     show('escrow', { replace: true });
-                    showEscrowDetail(job.id);
+                    showEscrowDetail(job.id, 'creator');
                 } catch (e) {
                     tg.MainButton.hideProgress();
                     const err = document.getElementById('escrow-form-error');
@@ -360,35 +428,134 @@
             };
         }
 
-        async function showEscrowDetail(id) {
+        let applyTargetJob = null;
+
+        function showApplyForm(job) {
+            applyTargetJob = job;
+            show('escrow-postular');
+            document.getElementById('escrow-apply-job').innerHTML = `
+                <p class="font-mono text-sm font-semibold">#ESC-${job.id.slice(0, 8).toUpperCase()}</p>
+                <p class="pp-hint mt-1 text-xs">${job.description}</p>
+                <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats</p>`;
+            document.getElementById('escrow-apply-form').reset();
+            document.getElementById('escrow-apply-form-error').classList.add('hidden');
+            tg.MainButton.setText(t('escrow_apply_submit')).show();
+            mainButtonAction = async () => {
+                const form = document.getElementById('escrow-apply-form');
+                const data = Object.fromEntries(new FormData(form).entries());
+                try {
+                    tg.MainButton.showProgress();
+                    await api(`/escrow-jobs/${applyTargetJob.id}/apply`, { method: 'POST', body: JSON.stringify({ message: data.message }) });
+                    tg.MainButton.hideProgress();
+                    tg.showAlert(t('escrow_applied'));
+                    history.pop();
+                    show('escrow-buscar', { replace: true });
+                } catch (e) {
+                    tg.MainButton.hideProgress();
+                    const err = document.getElementById('escrow-apply-form-error');
+                    err.textContent = e.message;
+                    err.classList.remove('hidden');
+                }
+            };
+        }
+
+        function disputeBlockHtml() {
+            return `
+                <div class="pp-card mt-3 rounded-xl p-4">
+                    <p class="text-sm font-semibold text-rose-600">${t('escrow_dispute_title')}</p>
+                    <textarea id="dispute-reason" rows="2" placeholder="${t('escrow_dispute_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 text-xs"></textarea>
+                    <button id="dispute-btn" class="mt-2 w-full rounded-lg border border-rose-300 py-2 text-sm font-semibold text-rose-600">${t('escrow_dispute')}</button>
+                </div>`;
+        }
+
+        function bindDisputeButton(id) {
+            document.getElementById('dispute-btn')?.addEventListener('click', async () => {
+                const reason = document.getElementById('dispute-reason').value.trim();
+                if (!reason) return;
+                try {
+                    await api(`/escrow-jobs/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) });
+                    tg.showAlert(t('escrow_dispute_opened'));
+                    showEscrowDetail(id, currentEscrowRole);
+                } catch (e) {
+                    const err = document.getElementById('escrow-detail-error');
+                    err.textContent = e.message;
+                    err.classList.remove('hidden');
+                }
+            });
+        }
+
+        async function loadApplications(jobId) {
+            const container = document.getElementById('escrow-applications');
+            if (!container) return;
+            const applications = await api(`/escrow-jobs/${jobId}/applications`);
+            if (!applications.length) {
+                container.innerHTML = `<p class="pp-hint text-sm">${t('escrow_applications_empty')}</p>`;
+                return;
+            }
+            container.innerHTML = `<p class="text-sm font-semibold">${t('escrow_applications_title')}</p>` + applications.map(application => `
+                <div class="pp-card mt-2 rounded-xl p-4">
+                    <p class="text-sm font-semibold">${application.freelancer?.display_name || ('#' + application.freelancer_customer_id)}</p>
+                    <p class="pp-hint mt-1 text-xs">${application.message}</p>
+                    <button data-accept="${application.id}" class="mt-2 w-full rounded-lg py-1.5 text-xs font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_accept')}</button>
+                </div>`).join('');
+            container.querySelectorAll('[data-accept]').forEach(btn => btn.addEventListener('click', async () => {
+                try {
+                    await api(`/escrow-jobs/${jobId}/applications/${btn.dataset.accept}/accept`, { method: 'POST' });
+                    tg.showAlert(t('escrow_accepted'));
+                    showEscrowDetail(jobId, 'creator');
+                } catch (e) {
+                    tg.showAlert(e.message);
+                }
+            }));
+        }
+
+        let currentEscrowRole = 'creator';
+
+        async function showEscrowDetail(id, role = 'creator') {
+            currentEscrowRole = role;
             show('escrow-detalle');
             const el = document.getElementById('escrow-detail');
             el.innerHTML = `<p class="pp-hint text-sm">${t('loading')}</p>`;
             const job = await api(`/escrow-jobs/${id}`);
+
+            let actionsHtml = '';
+            if (role === 'creator' && job.status === 'open') {
+                actionsHtml = `<div id="escrow-applications" class="mt-4"><p class="pp-hint text-sm">${t('loading')}</p></div>
+                    <button id="cancel-btn" class="mt-3 w-full rounded-lg border border-rose-300 py-2 text-sm font-semibold text-rose-600">${t('escrow_cancel')}</button>`;
+            } else if (role === 'creator' && job.status === 'assigned') {
+                actionsHtml = `
+                    <div class="pp-card mt-4 rounded-xl p-4">
+                        <p class="pp-hint text-xs font-medium">${t('escrow_funding_invoice')}</p>
+                        <p class="mt-1 break-all font-mono text-xs">${job.funding_invoice}</p>
+                        <button id="copy-invoice" class="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium">${t('escrow_copy')}</button>
+                    </div>`;
+            } else if (role === 'creator' && ['funded', 'in_progress'].includes(job.status)) {
+                actionsHtml = `<p class="pp-hint mt-4 text-sm">${t('escrow_waiting_freelancer')}</p>` + disputeBlockHtml();
+            } else if (role === 'creator' && job.status === 'delivered') {
+                actionsHtml = `
+                    <div class="pp-card mt-4 rounded-xl p-4">
+                        <p class="text-sm font-semibold">${t('escrow_release_title')}</p>
+                        <button id="release-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_release')}</button>
+                    </div>` + disputeBlockHtml();
+            } else if (role === 'freelancer' && job.status === 'assigned') {
+                actionsHtml = `<p class="pp-hint mt-4 text-sm">${t('escrow_waiting_payment')}</p>`;
+            } else if (role === 'freelancer' && ['funded', 'in_progress'].includes(job.status)) {
+                actionsHtml = `
+                    <div class="pp-card mt-4 rounded-xl p-4">
+                        <p class="text-sm font-semibold">${t('escrow_deliver_title')}</p>
+                        <textarea id="deliver-bolt11" rows="2" placeholder="${t('escrow_deliver_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 font-mono text-xs"></textarea>
+                        <button id="deliver-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_deliver_submit')}</button>
+                    </div>` + disputeBlockHtml();
+            } else if (role === 'freelancer' && job.status === 'delivered') {
+                actionsHtml = `<p class="pp-hint mt-4 text-sm">${t('escrow_waiting_release')}</p>` + disputeBlockHtml();
+            }
+
             el.innerHTML = `
                 <h1 class="font-mono text-lg font-bold">#ESC-${job.id.slice(0, 8).toUpperCase()}</h1>
                 <span class="mt-1 inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${statusStyles[job.status] ?? job.status}</span>
                 <p class="pp-hint mt-3 text-sm">${job.description}</p>
                 <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats <span class="pp-hint">+ ${Number(job.fee_sats).toLocaleString()} comisión</span></p>
-                ${job.status === 'created' ? `
-                    <div class="pp-card mt-4 rounded-xl p-4">
-                        <p class="pp-hint text-xs font-medium">${t('escrow_funding_invoice')}</p>
-                        <p class="mt-1 break-all font-mono text-xs">${job.funding_invoice}</p>
-                        <button id="copy-invoice" class="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium">${t('escrow_copy')}</button>
-                    </div>` : ''}
-                ${['funded', 'in_progress'].includes(job.status) ? `
-                    <div class="mt-4 space-y-3">
-                        <div class="pp-card rounded-xl p-4">
-                            <p class="text-sm font-semibold">${t('escrow_release_title')}</p>
-                            <textarea id="release-bolt11" rows="2" placeholder="${t('escrow_release_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 font-mono text-xs"></textarea>
-                            <button id="release-btn" class="mt-2 w-full rounded-lg py-2 text-sm font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_release')}</button>
-                        </div>
-                        <div class="pp-card rounded-xl p-4">
-                            <p class="text-sm font-semibold text-rose-600">${t('escrow_dispute_title')}</p>
-                            <textarea id="dispute-reason" rows="2" placeholder="${t('escrow_dispute_placeholder')}" class="mt-2 w-full rounded-lg border-slate-300 text-xs"></textarea>
-                            <button id="dispute-btn" class="mt-2 w-full rounded-lg border border-rose-300 py-2 text-sm font-semibold text-rose-600">${t('escrow_dispute')}</button>
-                        </div>
-                    </div>` : ''}
+                ${actionsHtml}
                 <p id="escrow-detail-error" class="mt-3 hidden text-sm text-rose-600"></p>`;
 
             document.getElementById('copy-invoice')?.addEventListener('click', () => {
@@ -396,31 +563,49 @@
                 tg.showAlert(t('escrow_copied'));
             });
             document.getElementById('release-btn')?.addEventListener('click', async () => {
-                const bolt11 = document.getElementById('release-bolt11').value.trim();
+                try {
+                    await api(`/escrow-jobs/${id}/release`, { method: 'POST' });
+                    tg.showAlert(t('escrow_released'));
+                    showEscrowDetail(id, role);
+                } catch (e) {
+                    const err = document.getElementById('escrow-detail-error');
+                    err.textContent = e.message;
+                    err.classList.remove('hidden');
+                }
+            });
+            document.getElementById('deliver-btn')?.addEventListener('click', async () => {
+                const bolt11 = document.getElementById('deliver-bolt11').value.trim();
                 if (!bolt11) return;
                 try {
-                    await api(`/escrow-jobs/${id}/release`, { method: 'POST', body: JSON.stringify({ payout_bolt11: bolt11 }) });
-                    tg.showAlert(t('escrow_released'));
-                    showEscrowDetail(id);
+                    await api(`/escrow-jobs/${id}/deliver`, { method: 'POST', body: JSON.stringify({ payout_bolt11: bolt11 }) });
+                    tg.showAlert(t('escrow_delivered'));
+                    showEscrowDetail(id, role);
                 } catch (e) {
                     const err = document.getElementById('escrow-detail-error');
                     err.textContent = e.message;
                     err.classList.remove('hidden');
                 }
             });
-            document.getElementById('dispute-btn')?.addEventListener('click', async () => {
-                const reason = document.getElementById('dispute-reason').value.trim();
-                if (!reason) return;
-                try {
-                    await api(`/escrow-jobs/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) });
-                    tg.showAlert(t('escrow_dispute_opened'));
-                    showEscrowDetail(id);
-                } catch (e) {
-                    const err = document.getElementById('escrow-detail-error');
-                    err.textContent = e.message;
-                    err.classList.remove('hidden');
-                }
+            bindDisputeButton(id);
+            document.getElementById('cancel-btn')?.addEventListener('click', () => {
+                tg.showConfirm(t('escrow_cancel_confirm'), async (ok) => {
+                    if (!ok) return;
+                    try {
+                        await api(`/escrow-jobs/${id}/cancel`, { method: 'POST' });
+                        tg.showAlert(t('escrow_cancelled'));
+                        history.pop();
+                        show('escrow', { replace: true });
+                    } catch (e) {
+                        const err = document.getElementById('escrow-detail-error');
+                        err.textContent = e.message;
+                        err.classList.remove('hidden');
+                    }
+                });
             });
+
+            if (role === 'creator' && job.status === 'open') {
+                loadApplications(id);
+            }
         }
 
         // --- Mempool ------------------------------------------------
@@ -457,6 +642,8 @@
             'alertas-nueva': setupAlertForm,
             escrow: loadEscrowJobs,
             'escrow-nuevo': setupEscrowForm,
+            'escrow-buscar': loadOpenJobs,
+            'escrow-freelance': loadFreelanceJobs,
             mempool: loadMempool,
         };
 

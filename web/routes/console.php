@@ -20,9 +20,12 @@ Schedule::call(function () {
 Schedule::call(function () {
     $escrow = app(EscrowService::class);
 
-    EscrowJob::where('status', 'created')
+    // 'open' postings (no freelancer picked yet, no invoice, no
+    // expires_at) aren't touched here — only assignments that got a
+    // funding invoice and then went stale unpaid.
+    EscrowJob::where('status', 'assigned')
         ->where('expires_at', '<=', now())
-        ->each(fn (EscrowJob $job) => $escrow->cancelUnfunded($job));
+        ->each(fn (EscrowJob $job) => $escrow->cancelUnfundedAssignment($job));
 })->everyFiveMinutes()->name('escrow-jobs:cancel-expired');
 
 // Replaces the old Node bot's RoboSatsPoller (node-cron on an arbitrary

@@ -22,10 +22,16 @@ class CustomerCommandRouter
     private const USAGE = <<<'TEXT'
         🔒 *Comandos de Escrow Lightning*
 
-        /escrow create <monto_sats> <descripción> — crea un trabajo (comisión 1.5%)
-        /escrow status <id> — consulta el estado de un trabajo
-        /escrow release <id> <factura_bolt11> — libera los fondos a la factura del freelancer
-        /escrow dispute <id> — abre una disputa para que un admin resuelva
+        /escrow create <monto_sats> <descripción> — publica un trabajo (comisión 1.5%)
+        /escrow browse — ver trabajos abiertos para postularte
+        /escrow apply <id> <mensaje> — postularte a un trabajo abierto
+        /escrow applications <id> — ver postulaciones a tu trabajo
+        /escrow accept <id_trabajo> <id_postulación> — elegir un freelancer y financiar
+        /escrow deliver <id> <factura_bolt11> — marcar entregado y pedir el cobro
+        /escrow release <id> — liberar el pago al freelancer
+        /escrow dispute <id> [motivo] — abrir una disputa para que un admin resuelva
+        /escrow status <id> — consultar el estado de un trabajo
+        /escrow cancel <id> — cancelar un trabajo tuyo que aún no fue asignado
         TEXT;
 
     private const LNBITS_DOWN_MESSAGE = '⚠️ El proveedor de pagos no está disponible en este momento. Probá de nuevo en unos minutos.';
@@ -110,30 +116,53 @@ class CustomerCommandRouter
     {
         $rest = $args;
         $subcommand = array_shift($rest);
-        $rest = array_pad($rest, 3, null); // pad so escrowStatus/Release/Dispute can safely read fixed positions
 
         return match ($subcommand) {
             'create' => $this->escrowCreate($customer, $rest),
-            'status' => $this->escrowStatus($customer, $rest),
+            'browse' => $this->escrowBrowse($customer),
+            'apply' => $this->escrowApply($customer, $rest),
+            'applications' => $this->escrowApplications($customer, $rest),
+            'accept' => $this->escrowAccept($customer, $rest),
+            'deliver' => $this->escrowDeliver($customer, $rest),
             'release' => $this->escrowRelease($customer, $rest),
             'dispute' => $this->escrowDispute($customer, $rest),
+            'status' => $this->escrowStatus($customer, $rest),
+            'cancel' => $this->escrowCancel($customer, $rest),
             default => self::USAGE,
         };
     }
 
     /**
-     * Finds a job and confirms the given customer is the one who created it.
-     * Returns null (and the caller should show the same generic "not found"
-     * message used for a missing id) for both a nonexistent job and one that
-     * belongs to someone else — telling those two cases apart would let a
-     * customer probe which job ids exist by trying /escrow status on ids
-     * that aren't theirs.
+     * Finds a job the given customer created. Returns null (and the caller
+     * should show the same generic "not found" message used for a missing
+     * id) for both a nonexistent job and one that belongs to someone else —
+     * telling those two cases apart would let a customer probe which job
+     * ids exist by trying commands on ids that aren't theirs.
      */
     private function ownedJobOrNull(Customer $customer, ?string $jobId): ?EscrowJob
     {
         $job = $jobId ? EscrowJob::find($jobId) : null;
 
         return $job && $job->creator_customer_id === $customer->id ? $job : null;
+    }
+
+    /** Same idea as ownedJobOrNull(), but for the freelancer assigned to the job. */
+    private function assignedJobOrNull(Customer $customer, ?string $jobId): ?EscrowJob
+    {
+        $job = $jobId ? EscrowJob::find($jobId) : null;
+
+        return $job && $job->counterparty_customer_id === $customer->id ? $job : null;
+    }
+
+    /** Same idea, but for either party — used by /status and /dispute, which both sides may call. */
+    private function partyJobOrNull(Customer $customer, ?string $jobId): ?EscrowJob
+    {
+        $job = $jobId ? EscrowJob::find($jobId) : null;
+        if (! $job) {
+            return null;
+        }
+
+        return in_array($customer->id, [$job->creator_customer_id, $job->counterparty_customer_id], true) ? $job : null;
     }
 
     /** @param array<int, string|null> $rest */
@@ -149,7 +178,119 @@ class CustomerCommandRouter
         }
 
         try {
-            $job = $this->escrow->createJob($customer, $amountSats, $description);
+            $job = $this->escrow->postJob($customer, $amountSats, $description);
+        } catch (DomainException $e) {
+            return "⚠️ {$e->getMessage()}";
+        }
+
+        return implode("\n", [
+            '✅ *Trabajo publicado*',
+            "ID: {$job->id}",
+            "Monto: {$job->amount_sats} sats (comisión {$job->fee_sats} sats)",
+            '',
+            'Ya es visible para freelancers con /escrow browse. Revisá las postulaciones con:',
+            "/escrow applications {$job->id}",
+        ]);
+    }
+
+    private function escrowBrowse(Customer $customer): string
+    {
+        $jobs = EscrowJob::where('status', 'open')
+            ->where('creator_customer_id', '!=', $customer->id)
+            ->latest()
+            ->limit(10)
+            ->get();
+
+        if ($jobs->isEmpty()) {
+            return 'No hay trabajos abiertos en este momento.';
+        }
+
+        $lines = ['📋 *Trabajos abiertos*', ''];
+        foreach ($jobs as $job) {
+            $lines[] = "ID: {$job->id}";
+            $lines[] = "Monto: {$job->amount_sats} sats";
+            $lines[] = $job->description;
+            $lines[] = "Postularte: /escrow apply {$job->id} <tu mensaje>";
+            $lines[] = '';
+        }
+
+        return trim(implode("\n", $lines));
+    }
+
+    /** @param array<int, string|null> $rest */
+    private function escrowApply(Customer $customer, array $rest): string
+    {
+        $parts = $rest;
+        $jobId = array_shift($parts);
+        $message = trim(implode(' ', array_filter($parts, fn ($part) => $part !== null)));
+
+        if (! $jobId || $message === '') {
+            return "Uso: /escrow apply <id> <mensaje>\n\n".self::USAGE;
+        }
+
+        $job = EscrowJob::where('status', 'open')->find($jobId);
+        if (! $job) {
+            return "⚠️ No se encontró un trabajo abierto con ID {$jobId}.";
+        }
+
+        try {
+            $this->escrow->applyToJob($job, $customer, $message);
+        } catch (DomainException $e) {
+            return "⚠️ {$e->getMessage()}";
+        }
+
+        return "✅ Te postulaste al trabajo {$jobId}. El cliente va a revisar tu postulación.";
+    }
+
+    /** @param array<int, string|null> $rest */
+    private function escrowApplications(Customer $customer, array $rest): string
+    {
+        [$jobId] = array_pad($rest, 1, null);
+        if (! $jobId) {
+            return "Uso: /escrow applications <id>\n\n".self::USAGE;
+        }
+
+        $job = $this->ownedJobOrNull($customer, $jobId);
+        if (! $job) {
+            return "⚠️ No se encontró el trabajo {$jobId}.";
+        }
+
+        $applications = $job->applications()->where('status', 'pending')->get();
+        if ($applications->isEmpty()) {
+            return 'Todavía no hay postulaciones para este trabajo.';
+        }
+
+        $lines = ["📋 *Postulaciones para {$jobId}*", ''];
+        foreach ($applications as $application) {
+            $lines[] = 'Postulación #'.$application->id.' — '.($application->freelancer->display_name ?? "Freelancer #{$application->freelancer_customer_id}");
+            $lines[] = $application->message;
+            $lines[] = "Aceptar: /escrow accept {$jobId} {$application->id}";
+            $lines[] = '';
+        }
+
+        return trim(implode("\n", $lines));
+    }
+
+    /** @param array<int, string|null> $rest */
+    private function escrowAccept(Customer $customer, array $rest): string
+    {
+        [$jobId, $applicationId] = array_pad($rest, 2, null);
+        if (! $jobId || ! $applicationId) {
+            return "Uso: /escrow accept <id_trabajo> <id_postulación>\n\n".self::USAGE;
+        }
+
+        $job = $this->ownedJobOrNull($customer, $jobId);
+        if (! $job) {
+            return "⚠️ No se encontró el trabajo {$jobId}.";
+        }
+
+        $application = $job->applications()->find($applicationId);
+        if (! $application) {
+            return "⚠️ No se encontró la postulación {$applicationId}.";
+        }
+
+        try {
+            $job = $this->escrow->acceptApplication($application, $customer);
         } catch (DomainException $e) {
             return "⚠️ {$e->getMessage()}";
         } catch (RuntimeException) {
@@ -157,11 +298,7 @@ class CustomerCommandRouter
         }
 
         return implode("\n", [
-            '✅ *Trabajo de escrow creado*',
-            "ID: {$job->id}",
-            "Monto: {$job->amount_sats} sats (comisión {$job->fee_sats} sats)",
-            "Estado: {$job->status}",
-            '',
+            '✅ *Freelancer asignado*',
             'Factura para financiar el escrow:',
             $job->funding_invoice,
             '',
@@ -170,14 +307,86 @@ class CustomerCommandRouter
     }
 
     /** @param array<int, string|null> $rest */
+    private function escrowDeliver(Customer $customer, array $rest): string
+    {
+        [$jobId, $bolt11] = array_pad($rest, 2, null);
+        if (! $jobId || ! $bolt11) {
+            return "Uso: /escrow deliver <id> <factura_bolt11>\n\n".self::USAGE;
+        }
+
+        $job = $this->assignedJobOrNull($customer, $jobId);
+        if (! $job) {
+            return "⚠️ No se encontró el trabajo {$jobId}.";
+        }
+
+        try {
+            $this->escrow->deliver($job, $customer, $bolt11);
+        } catch (DomainException $e) {
+            return "⚠️ {$e->getMessage()}";
+        }
+
+        return "✅ Marcaste el trabajo {$jobId} como entregado. El cliente ya puede liberar el pago.";
+    }
+
+    /** @param array<int, string|null> $rest */
+    private function escrowRelease(Customer $customer, array $rest): string
+    {
+        [$jobId] = array_pad($rest, 1, null);
+        if (! $jobId) {
+            return "Uso: /escrow release <id>\n\n".self::USAGE;
+        }
+
+        $job = $this->ownedJobOrNull($customer, $jobId);
+        if (! $job) {
+            return "⚠️ No se encontró el trabajo {$jobId}.";
+        }
+
+        try {
+            $this->escrow->release($job, $customer);
+        } catch (DomainException $e) {
+            return "⚠️ No se pudo liberar el escrow {$jobId}: {$e->getMessage()}";
+        } catch (RuntimeException) {
+            return self::LNBITS_DOWN_MESSAGE;
+        }
+
+        return "✅ Fondos del escrow {$jobId} liberados.";
+    }
+
+    /** @param array<int, string|null> $rest */
+    private function escrowDispute(Customer $customer, array $rest): string
+    {
+        $parts = $rest;
+        $jobId = array_shift($parts);
+        $reason = trim(implode(' ', array_filter($parts, fn ($part) => $part !== null)));
+        $reason = $reason !== '' ? $reason : 'Disputa abierta desde Telegram';
+
+        if (! $jobId) {
+            return "Uso: /escrow dispute <id> [motivo]\n\n".self::USAGE;
+        }
+
+        $job = $this->partyJobOrNull($customer, $jobId);
+        if (! $job) {
+            return "⚠️ No se encontró el trabajo {$jobId}.";
+        }
+
+        try {
+            $this->escrow->openDispute($job, $customer, $reason);
+        } catch (DomainException $e) {
+            return "⚠️ No se pudo abrir la disputa para el trabajo {$jobId}: {$e->getMessage()}";
+        }
+
+        return "🚩 Disputa abierta para el escrow {$jobId}. Un admin la revisará pronto.";
+    }
+
+    /** @param array<int, string|null> $rest */
     private function escrowStatus(Customer $customer, array $rest): string
     {
-        [$jobId] = $rest;
+        [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
             return "Uso: /escrow status <id>\n\n".self::USAGE;
         }
 
-        $job = $this->ownedJobOrNull($customer, $jobId);
+        $job = $this->partyJobOrNull($customer, $jobId);
         if (! $job) {
             return "⚠️ No se encontró el trabajo {$jobId}.";
         }
@@ -190,35 +399,11 @@ class CustomerCommandRouter
     }
 
     /** @param array<int, string|null> $rest */
-    private function escrowRelease(Customer $customer, array $rest): string
+    private function escrowCancel(Customer $customer, array $rest): string
     {
-        [$jobId, $payoutBolt11] = $rest;
-        if (! $jobId || ! $payoutBolt11) {
-            return "Uso: /escrow release <id> <factura_bolt11>\n\n".self::USAGE;
-        }
-
-        $job = $this->ownedJobOrNull($customer, $jobId);
-        if (! $job) {
-            return "⚠️ No se encontró el trabajo {$jobId}.";
-        }
-
-        try {
-            $this->escrow->release($job, $payoutBolt11);
-        } catch (DomainException) {
-            return "⚠️ No se pudo liberar el escrow {$jobId}. Verificá que la factura sea válida y no haya expirado.";
-        } catch (RuntimeException) {
-            return self::LNBITS_DOWN_MESSAGE;
-        }
-
-        return "✅ Fondos del escrow {$jobId} liberados.";
-    }
-
-    /** @param array<int, string|null> $rest */
-    private function escrowDispute(Customer $customer, array $rest): string
-    {
-        [$jobId] = $rest;
+        [$jobId] = array_pad($rest, 1, null);
         if (! $jobId) {
-            return "Uso: /escrow dispute <id>\n\n".self::USAGE;
+            return "Uso: /escrow cancel <id>\n\n".self::USAGE;
         }
 
         $job = $this->ownedJobOrNull($customer, $jobId);
@@ -227,11 +412,11 @@ class CustomerCommandRouter
         }
 
         try {
-            $this->escrow->openDispute($job, $customer, 'Disputa abierta desde Telegram');
-        } catch (DomainException) {
-            return "⚠️ No se pudo abrir la disputa para el trabajo {$jobId}.";
+            $this->escrow->cancelOpenJob($job, $customer);
+        } catch (DomainException $e) {
+            return "⚠️ No se pudo cancelar el trabajo {$jobId}: {$e->getMessage()}";
         }
 
-        return "🚩 Disputa abierta para el escrow {$jobId}. Un admin la revisará pronto.";
+        return "✅ Trabajo {$jobId} cancelado.";
     }
 }

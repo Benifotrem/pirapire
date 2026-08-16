@@ -10,9 +10,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Receives payment-status callbacks from LNbits when a hold invoice's HTLC
- * is accepted (i.e. the payer has funded the escrow but the payment is not
- * yet settled/finalized — that only happens on EscrowService::release()).
+ * Receives payment-status callbacks from LNbits when a job's funding
+ * invoice (generated once the client accepts a freelancer's application —
+ * see EscrowService::acceptApplication()) gets paid.
  */
 class EscrowWebhookController extends Controller
 {
@@ -37,7 +37,7 @@ class EscrowWebhookController extends Controller
             return response()->json(['message' => 'Unknown payment_hash'], 404);
         }
 
-        if ($job->status === 'created') {
+        if ($job->status === 'assigned') {
             $this->escrow->markFunded($job);
         }
 

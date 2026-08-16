@@ -5,26 +5,40 @@ namespace App\Services\Escrow;
 use App\Models\Customer;
 use App\Models\EscrowDispute;
 use App\Models\EscrowJob;
+use App\Models\EscrowJobApplication;
 use App\Services\Lightning\LnbitsClient;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
 /**
- * State machine for Lightning job escrow:
+ * State machine for Lightning job escrow — hiring, payment, and disputes
+ * all happen on Pirapire itself, not coordinated off-platform:
  *
- *   created -> funded -> in_progress -> completed
- *                    \-> disputed -> completed | refunded
- *   created -> cancelled (expired / never funded)
+ *   open -> assigned -> funded -> in_progress -> delivered -> completed
+ *                                       \             |          ^
+ *                                        \            v          |
+ *                                         `------> disputed ------`
+ *                                                      |
+ *                                                      v
+ *                                                  refunded
+ *   open -> cancelled (creator cancels before picking a freelancer)
+ *   assigned -> cancelled (never funded, expired)
  *
- * LNbits has no "hold invoice" extension (see LnbitsClient), so this
- * isn't a true HTLC-hold escrow — the client's funding invoice settles
- * into the platform's LNbits wallet immediately, and the platform holds
- * that balance for the life of the job. "Releasing" or "refunding" means
- * actively paying out a fresh invoice supplied by the freelancer/client
- * at that moment (Lightning invoices expire, so there's nothing to store
- * upfront). The platform takes a fee (config('services.escrow.fee_percent'),
- * default 1.5%) on top of the job amount, charged in the funding invoice;
- * release only pays out amount_sats, so the fee stays in the wallet.
+ * `open`: the creator posted a job (amount + description); freelancers can
+ * see it and apply (EscrowJobApplication). `assigned`: the creator accepted
+ * one application — a funding invoice is generated at that point, not when
+ * the job was first posted, since there's nothing to fund until someone is
+ * actually going to do the work. `delivered`: the freelancer marked the job
+ * done and submitted their own payout invoice — the creator's release()
+ * pays that stored invoice, so a bolt11 never has to be relayed through an
+ * outside chat. See LnbitsClient for why funding uses a regular invoice
+ * rather than a real hold invoice (LNbits has no such extension).
+ *
+ * Authorization for who may call an action lives here, not just in the
+ * Telegram bot router / Mini App controllers that call it — see the "not
+ * checked here" write-up that led to a real IDOR (a customer could release
+ * or dispute someone else's job by guessing its id) for why relying only on
+ * the caller to remember an ownership check isn't enough.
  */
 class EscrowService
 {
@@ -42,59 +56,128 @@ class EscrowService
         return (int) round($amountSats * $this->feePercent() / 100);
     }
 
-    public function createJob(Customer $creator, int $amountSats, string $description): EscrowJob
+    /** Posts an open job — no invoice yet, nothing to fund until a freelancer is picked. */
+    public function postJob(Customer $creator, int $amountSats, string $description): EscrowJob
     {
         if ($amountSats <= 0) {
             throw new DomainException('El monto del escrow debe ser mayor a cero.');
         }
 
-        $feeSats = $this->calculateFee($amountSats);
-
-        $invoice = $this->lnbits->createInvoice(
-            amountSats: $amountSats + $feeSats,
-            memo: "Pirapire escrow: {$description}",
-            webhookUrl: route('api.escrow.webhook'),
-        );
-
         return EscrowJob::create([
             'creator_customer_id' => $creator->id,
             'description' => $description,
             'amount_sats' => $amountSats,
-            'fee_sats' => $feeSats,
-            'status' => 'created',
-            'funding_invoice' => $invoice['payment_request'] ?? $invoice['bolt11'] ?? '',
-            'payment_hash' => $invoice['payment_hash'],
-            'expires_at' => now()->addSeconds(self::DEFAULT_EXPIRY_SECONDS),
+            'fee_sats' => $this->calculateFee($amountSats),
+            'status' => 'open',
         ]);
+    }
+
+    /** A freelancer pitches themselves for an open job. Re-applying updates the existing pitch. */
+    public function applyToJob(EscrowJob $job, Customer $freelancer, string $message): EscrowJobApplication
+    {
+        $this->assertStatus($job, ['open']);
+
+        if ($job->creator_customer_id === $freelancer->id) {
+            throw new DomainException('No podés postularte a tu propio trabajo.');
+        }
+
+        return EscrowJobApplication::updateOrCreate(
+            ['escrow_job_id' => $job->id, 'freelancer_customer_id' => $freelancer->id],
+            ['message' => $message, 'status' => 'pending'],
+        );
+    }
+
+    /**
+     * The creator accepts one application: assigns that freelancer and
+     * generates the funding invoice. Every other pending application on the
+     * job is rejected in the same transaction.
+     */
+    public function acceptApplication(EscrowJobApplication $application, Customer $actingCreator): EscrowJob
+    {
+        $job = $application->job;
+        $this->assertCreator($job, $actingCreator);
+        $this->assertStatus($job, ['open']);
+
+        if ($application->status !== 'pending') {
+            throw new DomainException('Esa postulación ya no está disponible.');
+        }
+
+        $invoice = $this->lnbits->createInvoice(
+            amountSats: $job->amount_sats + $job->fee_sats,
+            memo: "Pirapire escrow: {$job->description}",
+            webhookUrl: route('api.escrow.webhook'),
+        );
+
+        return DB::transaction(function () use ($job, $application, $invoice) {
+            $job->update([
+                'counterparty_customer_id' => $application->freelancer_customer_id,
+                'status' => 'assigned',
+                'funding_invoice' => $invoice['payment_request'] ?? $invoice['bolt11'] ?? '',
+                'payment_hash' => $invoice['payment_hash'],
+                'expires_at' => now()->addSeconds(self::DEFAULT_EXPIRY_SECONDS),
+            ]);
+
+            $application->update(['status' => 'accepted']);
+
+            $job->applications()
+                ->where('id', '!=', $application->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'rejected']);
+
+            return $job->fresh();
+        });
     }
 
     /** Called from the LNbits webhook once the funding invoice is paid. */
     public function markFunded(EscrowJob $job): void
     {
-        $this->assertStatus($job, ['created']);
+        $this->assertStatus($job, ['assigned']);
 
         $job->update(['status' => 'funded', 'funded_at' => now()]);
     }
 
-    public function markInProgress(EscrowJob $job): void
+    public function markInProgress(EscrowJob $job, Customer $actingFreelancer): void
     {
+        $this->assertFreelancer($job, $actingFreelancer);
         $this->assertStatus($job, ['funded']);
 
         $job->update(['status' => 'in_progress']);
     }
 
-    /** Releases funds to the freelancer by paying the bolt11 invoice they supply. */
-    public function release(EscrowJob $job, string $payoutBolt11): void
+    /** The freelancer marks the job done and submits their own invoice to be paid out. */
+    public function deliver(EscrowJob $job, Customer $actingFreelancer, string $payoutBolt11): void
     {
-        $this->assertStatus($job, ['funded', 'in_progress', 'disputed']);
+        $this->assertFreelancer($job, $actingFreelancer);
+        $this->assertStatus($job, ['funded', 'in_progress']);
 
-        DB::transaction(function () use ($job, $payoutBolt11) {
-            $this->lnbits->payInvoice($payoutBolt11);
+        $job->update(['status' => 'delivered', 'freelancer_payout_invoice' => $payoutBolt11]);
+    }
+
+    /**
+     * Releases funds to the freelancer by paying the invoice they submitted
+     * at delivery. $payoutBolt11 is an admin-only override for resolving a
+     * dispute where the stored invoice expired — the customer-facing path
+     * never passes it.
+     */
+    public function release(EscrowJob $job, ?Customer $actingCreator = null, ?string $payoutBolt11 = null): void
+    {
+        if ($actingCreator) {
+            $this->assertCreator($job, $actingCreator);
+        }
+        $this->assertStatus($job, ['delivered', 'disputed']);
+
+        $invoice = $payoutBolt11 ?? $job->freelancer_payout_invoice;
+        if (! $invoice) {
+            throw new DomainException('Todavía no hay una factura del freelancer para liberar este trabajo.');
+        }
+
+        DB::transaction(function () use ($job, $invoice) {
+            $this->lnbits->payInvoice($invoice);
 
             $job->update([
                 'status' => 'completed',
                 'settled_at' => now(),
-                'payout_destination' => $payoutBolt11,
+                'payout_destination' => $invoice,
             ]);
 
             // No-op via the `where('status', 'open')` clause when the job
@@ -109,10 +192,10 @@ class EscrowService
         });
     }
 
-    /** Refunds the client in full (amount + fee) by paying the bolt11 invoice they supply. */
+    /** Refunds the client in full (amount + fee). Admin-only — no customer-facing path calls this. */
     public function refund(EscrowJob $job, string $refundBolt11): void
     {
-        $this->assertStatus($job, ['funded', 'in_progress', 'disputed']);
+        $this->assertStatus($job, ['funded', 'in_progress', 'delivered', 'disputed']);
 
         DB::transaction(function () use ($job, $refundBolt11) {
             $this->lnbits->payInvoice($refundBolt11);
@@ -130,16 +213,28 @@ class EscrowService
         });
     }
 
-    public function cancelUnfunded(EscrowJob $job): void
+    public function cancelOpenJob(EscrowJob $job, Customer $actingCreator): void
     {
-        $this->assertStatus($job, ['created']);
+        $this->assertCreator($job, $actingCreator);
+        $this->assertStatus($job, ['open']);
+
+        $job->update(['status' => 'cancelled']);
+    }
+
+    /** Cancels a job that was assigned to a freelancer but never funded before its invoice expired. */
+    public function cancelUnfundedAssignment(EscrowJob $job): void
+    {
+        $this->assertStatus($job, ['assigned']);
 
         $job->update(['status' => 'cancelled']);
     }
 
     public function openDispute(EscrowJob $job, Customer $openedBy, string $reason): EscrowDispute
     {
-        $this->assertStatus($job, ['funded', 'in_progress']);
+        if (! in_array($openedBy->id, [$job->creator_customer_id, $job->counterparty_customer_id], true)) {
+            throw new DomainException('Solo el cliente o el freelancer de este trabajo pueden abrir una disputa.');
+        }
+        $this->assertStatus($job, ['funded', 'in_progress', 'delivered']);
 
         return DB::transaction(function () use ($job, $openedBy, $reason) {
             $job->update(['status' => 'disputed']);
@@ -150,6 +245,20 @@ class EscrowService
                 'status' => 'open',
             ]);
         });
+    }
+
+    private function assertCreator(EscrowJob $job, Customer $customer): void
+    {
+        if ($job->creator_customer_id !== $customer->id) {
+            throw new DomainException('No encontrado.');
+        }
+    }
+
+    private function assertFreelancer(EscrowJob $job, Customer $customer): void
+    {
+        if ($job->counterparty_customer_id !== $customer->id) {
+            throw new DomainException('No encontrado.');
+        }
     }
 
     private function assertStatus(EscrowJob $job, array $allowed): void

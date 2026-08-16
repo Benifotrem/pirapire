@@ -21,7 +21,7 @@ class DashboardWidgetsTest extends TestCase
 
         EscrowJob::factory()->create(['status' => 'completed', 'fee_sats' => 100, 'amount_sats' => 5000]);
         EscrowJob::factory()->create(['status' => 'completed', 'fee_sats' => 200, 'amount_sats' => 8000]);
-        EscrowJob::factory()->create(['status' => 'created', 'fee_sats' => 999, 'amount_sats' => 1]);
+        EscrowJob::factory()->create(['status' => 'open', 'counterparty_customer_id' => null, 'fee_sats' => 999, 'amount_sats' => 1]);
 
         $this->actingAs($admin, 'web');
 

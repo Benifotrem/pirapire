@@ -24,7 +24,7 @@ class PlatformStatsService
         return Cache::remember('admin-dashboard:platform-stats', 30, fn () => [
             'fee_sats' => (int) EscrowJob::where('status', 'completed')->sum('fee_sats'),
             'volume_sats' => (int) EscrowJob::where('status', 'completed')->sum('amount_sats'),
-            'active_jobs' => EscrowJob::whereIn('status', ['created', 'funded', 'in_progress', 'disputed'])->count(),
+            'active_jobs' => EscrowJob::whereIn('status', ['open', 'assigned', 'funded', 'in_progress', 'delivered', 'disputed'])->count(),
             'open_disputes' => EscrowDispute::where('status', 'open')->count(),
             'active_vips' => VipSubscription::where('status', 'active')->where('expires_at', '>', now())->count(),
             'customers' => Customer::count(),

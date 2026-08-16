@@ -89,7 +89,7 @@ class AdminController extends Controller
 
     public function showEscrowJob(EscrowJob $job): JsonResponse
     {
-        return response()->json($job->load('creator', 'disputes'));
+        return response()->json($job->load('creator', 'freelancer', 'applications', 'disputes'));
     }
 
     public function disputes(Request $request): JsonResponse
@@ -120,7 +120,7 @@ class AdminController extends Controller
             $job = $dispute->escrowJob;
 
             if ($validated['action'] === 'release') {
-                $this->escrow->release($job, $validated['payout_bolt11']);
+                $this->escrow->release($job, null, $validated['payout_bolt11']);
             } else {
                 $this->escrow->refund($job, $validated['payout_bolt11']);
             }

@@ -100,28 +100,34 @@ Varios relays separados por coma es lo recomendado — si uno está caído, `Mos
 
 ## 3. Escrow Lightning para empleos
 
-`web/app/Services/Escrow/EscrowService.php` implementa una máquina de estados sobre la API de pagos de LNbits (`web/app/Services/Lightning/LnbitsClient.php`):
+Contratación, pago y disputas ocurren **enteramente dentro de Pirapire** — no es un acuerdo por fuera con la plataforma solo de caja de pago. `web/app/Services/Escrow/EscrowService.php` implementa la máquina de estados completa sobre la API de pagos de LNbits (`web/app/Services/Lightning/LnbitsClient.php`):
 
 ```
-created → funded → in_progress → completed
-              │                       ▲
-              └──────► disputed ──────┤
-                            │         │
-                            └────► refunded
-created → cancelled (expira sin fondear)
+open → assigned → funded → in_progress → delivered → completed
+                                  │                        ▲
+                                  └──────► disputed ────────┤
+                                                │            
+                                                └────► refunded
+open → cancelled (el cliente cancela antes de asignar freelancer)
+assigned → cancelled (nunca se fondeó, expiró)
 ```
 
-**Importante:** LNbits **no tiene una extensión de "hold invoice"** — verificamos esto contra el registro oficial de extensiones (`lnbits/lnbits-extensions`) y no existe. El diseño original de este proyecto asumía lo contrario; esta sección documenta el diseño real, implementado con la API core de LNbits:
+- **`open`**: el cliente publica el trabajo (`postJob()`) — monto y descripción, sin factura todavía, porque no hay nada que fondear hasta que alguien vaya a hacer el trabajo.
+- Los freelancers ven los trabajos abiertos y se postulan (`applyToJob()` → `EscrowJobApplication`, con un mensaje). Un freelancer no puede postularse a su propio trabajo.
+- El cliente revisa las postulaciones y elige una (`acceptApplication()`): recién ahí se asigna el freelancer (`counterparty_customer_id`) y se genera la factura de fondeo — una factura **normal** por `monto + comisión (1.5% por defecto)` vía `LnbitsClient::createInvoice()`. El resto de las postulaciones pendientes quedan rechazadas automáticamente. Estado: **`assigned`**.
+- Cuando el cliente paga esa factura, liquida **de inmediato** en el wallet de LNbits de la plataforma — no queda un HTLC "retenido" esperando revelar un preimage (LNbits **no tiene extensión de "hold invoice"** — verificado contra el registro oficial `lnbits/lnbits-extensions`, no existe; el diseño original de este proyecto asumía lo contrario). `markFunded()` se dispara desde el webhook de LNbits (`POST /api/escrow/webhook`). Estado: **`funded`**, opcionalmente **`in_progress`**.
+- Cuando el freelancer termina, marca el trabajo como entregado y **sube su propia factura bolt11 de cobro en ese momento** (`deliver()`) — nunca se relaya un bolt11 por un chat externo, porque las facturas Lightning expiran y no se pueden generar de antemano. Estado: **`delivered`**.
+- El cliente libera el pago (`release()`), que paga automáticamente la factura que el freelancer ya dejó cargada — no hace falta que nadie vuelva a pedirla ni pegarla a mano. Paga `amount_sats` (la comisión queda en el wallet de la plataforma). Estado: **`completed`**.
+- Cualquiera de las dos partes (cliente o freelancer, no un tercero) puede abrir una disputa (`openDispute()`) desde `funded`, `in_progress` o `delivered`. Un administrador la resuelve desde el panel de Filament (`EscrowDisputeResource`) o la Mini App de admin — usando la factura que el freelancer ya dejó cargada si existe, o pidiendo una nueva si la disputa se abrió antes de la entrega.
+- Un job programado (`routes/console.php`, cada 5 min) cancela automáticamente las asignaciones (`assigned`) nunca fondeadas que expiraron. Un trabajo `open` sin postulaciones el cliente lo cancela manualmente (`cancelOpenJob()`).
 
-- Al crear el trabajo, `createJob()` genera una factura **normal** por `monto + comisión (1.5% por defecto)` vía `LnbitsClient::createInvoice()`. Cuando el cliente la paga, liquida **de inmediato** en el wallet de LNbits de la plataforma — no queda un HTLC "retenido" esperando revelar un preimage.
-- `markFunded()` se dispara desde el webhook de LNbits (`POST /api/escrow/webhook`) cuando esa factura se paga.
-- `release(job, payoutBolt11)` y `refund(job, refundBolt11)` hacen un **pago saliente** real (`LnbitsClient::payInvoice()`) a una factura bolt11 que el freelancer o el cliente proveen en ese momento — no hay nada que "revelar", porque las facturas Lightning expiran y no se pueden generar de antemano. `release()` paga `amount_sats` (la comisión queda en el wallet); `refund()` paga el monto completo (`amount_sats + fee_sats`).
-- Las disputas (`openDispute()`) las resuelve un administrador desde el panel de Filament (`EscrowDisputeResource`), pidiendo la factura correspondiente antes de liberar o reembolsar.
-- Un job programado (`routes/console.php`, cada 5 min) cancela automáticamente los escrows nunca fondeados que expiraron.
+**Autorización, no solo de cara al usuario:** cada acción (`acceptApplication`, `deliver`, `release`, `cancelOpenJob`, `openDispute`) valida en `EscrowService` mismo que quien la ejecuta es la parte correcta (el creador para aceptar/liberar/cancelar, el freelancer asignado para entregar, cualquiera de los dos para disputar) — no solo en el controlador o el comando de Telegram que la invoca. Esto es defensa en profundidad: un IDOR real llegó a producción antes de esto (los comandos `/escrow release|dispute|status` no chequeaban dueño), así que la validación ahora vive también en la capa de servicio, no únicamente en cada punto de entrada.
 
 **Implicancia de custodia:** a diferencia de un hold invoice real (donde los fondos quedan en un HTLC hasta liquidarse), acá el wallet de LNbits de la plataforma tiene el saldo real y completo mientras el trabajo está en curso — es un escrow custodial clásico, no un HTLC retenido. Ver la sección de LNbits en "Desarrollo local" para más detalle sobre `FakeWallet` vs. un backend real.
 
-**Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `created → funded → in_progress → completed` y `created → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`.
+**Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio (incluida la autorización de cada uno) contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `open → assigned → funded → in_progress → delivered → completed` y `open → ... → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`. `tests/Feature/TelegramCustomerWebhookTest.php` y `tests/Feature/MiniApp/CustomerMiniAppTest.php` cubren lo mismo desde cada interfaz, incluyendo los intentos de acceso de alguien que no es parte del trabajo.
+
+**Limitación conocida:** ningún cambio de estado (postulación recibida, freelancer aceptado, trabajo entregado) dispara un mensaje de Telegram al otro lado — cada parte se entera revisando la Mini App o corriendo `/escrow status`, `/escrow browse` o `/escrow applications` de nuevo. Agregar notificaciones activas (reusando `App\Services\Telegram\TelegramBotClient::sendMessage()`, igual que las alertas P2P) queda como mejora futura.
 
 ## 4. Comandos de Telegram (bot de clientes)
 
@@ -130,10 +136,16 @@ created → cancelled (expira sin fondear)
 | `/start` | Da de alta al cliente (por `chat_id`) y muestra la bienvenida. |
 | `/mempool` | Altura de bloque actual y tarifas recomendadas (mempool.space). |
 | `/vip` | Estado de suscripción VIP del chat que escribe. |
-| `/escrow create <monto_sats> <descripción>` | Crea un trabajo de escrow (factura de fondeo vía LNbits). |
-| `/escrow status <id>` | Consulta el estado de un trabajo. |
-| `/escrow release <id> <bolt11>` | Libera los fondos, pagando la factura bolt11 que provee el freelancer. |
-| `/escrow dispute <id>` | Abre una disputa para revisión de un admin. |
+| `/escrow create <monto_sats> <descripción>` | Publica un trabajo abierto (sin factura todavía — ver sección 3). |
+| `/escrow browse` | Lista trabajos abiertos de otros clientes, para postularte. |
+| `/escrow apply <id> <mensaje>` | Te postulás a un trabajo abierto. |
+| `/escrow applications <id>` | El cliente ve las postulaciones a su trabajo. |
+| `/escrow accept <id_trabajo> <id_postulación>` | El cliente elige un freelancer — genera la factura de fondeo. |
+| `/escrow deliver <id> <bolt11>` | El freelancer marca el trabajo entregado y sube su factura de cobro. |
+| `/escrow release <id>` | El cliente libera el pago (paga la factura que ya dejó el freelancer). |
+| `/escrow dispute <id> [motivo]` | Cliente o freelancer abren una disputa para revisión de un admin. |
+| `/escrow status <id>` | Cliente o freelancer consultan el estado de un trabajo. |
+| `/escrow cancel <id>` | El cliente cancela un trabajo propio que todavía no tiene freelancer asignado. |
 | `/help` | Lista de comandos disponibles. |
 
 Implementación: `App\Http\Controllers\TelegramCustomerWebhookController` recibe el webhook (`POST /api/telegram/customer-webhook`) y delega en `App\Services\Bot\CustomerCommandRouter`, que corre como PHP normal dentro del mismo request — sin bot ni cola externa de por medio.
@@ -159,7 +171,7 @@ La respuesta debe tener `"url":"https://pirapire.pro/api/telegram/customer-webho
 
 ### Mini App de clientes
 
-Además de los comandos de texto, el bot expone una **Telegram Mini App** — una página web (`resources/views/miniapp/customer.blade.php`) que se abre dentro del chat tocando el botón ☰ junto al mensaje, con las mismas acciones pero en formularios en vez de comandos: estado VIP, alta/pausa/borrado de alertas P2P, listado y detalle de contratos de escrow (crear, liberar, disputar) y el estado de la mempool.
+Además de los comandos de texto, el bot expone una **Telegram Mini App** — una página web (`resources/views/miniapp/customer.blade.php`) que se abre dentro del chat tocando el botón ☰ junto al mensaje, con las mismas acciones pero en formularios en vez de comandos: estado VIP, alta/pausa/borrado de alertas P2P, y el ciclo completo de escrow como marketplace — publicar un trabajo, ver "Mis trabajos publicados" (como cliente) o "Donde trabajo" (como freelancer), buscar y postularte a trabajos abiertos, aceptar postulaciones, marcar entrega, liberar el pago y abrir disputas — y el estado de la mempool.
 
 No hay sesión ni cookie de Laravel — Telegram firma un payload (`Telegram.WebApp.initData`) con el token del bot cada vez que se abre la Mini App, y el frontend lo manda en cada `fetch()` vía el header `X-Telegram-Init-Data`. `App\Http\Middleware\AuthenticateCustomerMiniApp` verifica esa firma (`App\Services\Telegram\WebAppAuth`, HMAC-SHA256 según el esquema documentado por Telegram) contra `TELEGRAM_BOT_TOKEN` y resuelve/crea el `Customer` por el mismo `telegram_chat_id` que usa el webhook — comandos y Mini App comparten datos, no son sistemas separados. La API JSON detrás de la Mini App vive en `routes/api.php` bajo `/api/miniapp/customer/*`, y llama a los mismos `EscrowService`/`MempoolClient`/modelos que usa `CustomerCommandRouter`.
 

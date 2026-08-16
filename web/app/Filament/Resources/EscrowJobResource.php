@@ -37,6 +37,7 @@ class EscrowJobResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('id')->label('ID')->limit(8)->copyable(),
                 Tables\Columns\TextColumn::make('creator.telegram_chat_id')->label('Cliente')->placeholder('—'),
+                Tables\Columns\TextColumn::make('freelancer.telegram_chat_id')->label('Freelancer')->placeholder('sin asignar'),
                 Tables\Columns\TextColumn::make('description')->limit(40),
                 Tables\Columns\TextColumn::make('amount_sats')->label('Sats'),
                 Tables\Columns\TextColumn::make('fee_sats')->label('Comisión'),
@@ -50,9 +51,11 @@ class EscrowJobResource extends Resource
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')->options([
-                    'created' => 'Creado',
+                    'open' => 'Abierto (buscando freelancer)',
+                    'assigned' => 'Asignado (esperando pago)',
                     'funded' => 'Financiado',
                     'in_progress' => 'En progreso',
+                    'delivered' => 'Entregado (esperando liberación)',
                     'completed' => 'Completado',
                     'disputed' => 'En disputa',
                     'refunded' => 'Reembolsado',
@@ -64,22 +67,24 @@ class EscrowJobResource extends Resource
                 Tables\Actions\Action::make('release')
                     ->label('Liberar')
                     ->icon('heroicon-o-check-circle')
-                    ->visible(fn (EscrowJob $record) => in_array($record->status, ['funded', 'in_progress', 'disputed'], true))
+                    ->visible(fn (EscrowJob $record) => in_array($record->status, ['delivered', 'disputed'], true))
                     ->form([
-                        Forms\Components\Textarea::make('payout_bolt11')
-                            ->label('Factura del freelancer (bolt11)')
-                            ->helperText('Pedísela al freelancer justo antes de liberar — las facturas Lightning expiran.')
-                            ->required(),
+                        Forms\Components\Placeholder::make('freelancer_payout_invoice')
+                            ->label('Factura que envió el freelancer al entregar')
+                            ->content(fn (EscrowJob $record) => $record->freelancer_payout_invoice ?: '— no hay ninguna guardada —'),
+                        Forms\Components\Textarea::make('payout_bolt11_override')
+                            ->label('Factura alternativa (opcional)')
+                            ->helperText('Dejalo vacío para usar la factura de arriba. Completalo solo si esa factura ya expiró y conseguiste una nueva del freelancer.'),
                     ])
                     ->action(fn (EscrowJob $record, array $data) => self::runAction(
                         $record,
-                        fn (EscrowService $s) => $s->release($record, $data['payout_bolt11']),
+                        fn (EscrowService $s) => $s->release($record, null, $data['payout_bolt11_override'] ?: null),
                     )),
                 Tables\Actions\Action::make('refund')
                     ->label('Reembolsar')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('danger')
-                    ->visible(fn (EscrowJob $record) => in_array($record->status, ['funded', 'in_progress', 'disputed'], true))
+                    ->visible(fn (EscrowJob $record) => in_array($record->status, ['funded', 'in_progress', 'delivered', 'disputed'], true))
                     ->form([
                         Forms\Components\Textarea::make('refund_bolt11')
                             ->label('Factura del cliente para el reembolso (bolt11)')

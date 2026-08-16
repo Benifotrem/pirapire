@@ -26,6 +26,7 @@ class EscrowJob extends Model
         'funding_invoice',
         'payment_hash',
         'payout_destination',
+        'freelancer_payout_invoice',
         'expires_at',
         'funded_at',
         'settled_at',
@@ -52,9 +53,21 @@ class EscrowJob extends Model
         return $this->belongsTo(Customer::class, 'creator_customer_id');
     }
 
-    public function counterparty(): BelongsTo
+    /**
+     * The freelancer doing the job — stored in the `counterparty_customer_id`
+     * column (kept from the earlier design; nothing outside this model
+     * referenced it, so it was safe to expose under its actual role instead
+     * of the generic name). Set by EscrowService::acceptApplication() once
+     * the client picks one of the applications() below.
+     */
+    public function freelancer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'counterparty_customer_id');
+    }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(EscrowJobApplication::class);
     }
 
     public function disputes(): HasMany

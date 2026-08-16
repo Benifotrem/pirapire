@@ -38,8 +38,15 @@ Route::middleware('miniapp.customer')->prefix('miniapp/customer')->name('api.min
     Route::delete('/alerts/{alert}', [MiniAppCustomerController::class, 'destroyAlert'])->name('alerts.destroy');
 
     Route::get('/escrow-jobs', [MiniAppCustomerController::class, 'escrowJobs'])->name('escrow.index');
+    Route::get('/escrow-jobs/mine-as-freelancer', [MiniAppCustomerController::class, 'myFreelanceJobs'])->name('escrow.mine-as-freelancer');
+    Route::get('/escrow-jobs/open', [MiniAppCustomerController::class, 'openEscrowJobs'])->name('escrow.open');
     Route::post('/escrow-jobs', [MiniAppCustomerController::class, 'storeEscrowJob'])->name('escrow.store');
     Route::get('/escrow-jobs/{job}', [MiniAppCustomerController::class, 'showEscrowJob'])->name('escrow.show');
+    Route::post('/escrow-jobs/{job}/cancel', [MiniAppCustomerController::class, 'cancelEscrowJob'])->name('escrow.cancel');
+    Route::post('/escrow-jobs/{job}/apply', [MiniAppCustomerController::class, 'applyToEscrowJob'])->name('escrow.apply');
+    Route::get('/escrow-jobs/{job}/applications', [MiniAppCustomerController::class, 'jobApplications'])->name('escrow.applications');
+    Route::post('/escrow-jobs/{job}/applications/{application}/accept', [MiniAppCustomerController::class, 'acceptApplication'])->name('escrow.accept');
+    Route::post('/escrow-jobs/{job}/deliver', [MiniAppCustomerController::class, 'deliverEscrowJob'])->name('escrow.deliver');
     Route::post('/escrow-jobs/{job}/release', [MiniAppCustomerController::class, 'releaseEscrowJob'])->name('escrow.release');
     Route::post('/escrow-jobs/{job}/dispute', [MiniAppCustomerController::class, 'disputeEscrowJob'])->name('escrow.dispute');
 });

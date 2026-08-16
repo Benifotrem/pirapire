@@ -52,14 +52,16 @@ class EscrowDisputeResource extends Resource
                     ->icon('heroicon-o-check-circle')
                     ->visible(fn (EscrowDispute $record) => $record->status === 'open')
                     ->form([
+                        Forms\Components\Placeholder::make('freelancer_payout_invoice')
+                            ->label('Factura que el freelancer envió al entregar (si la hay)')
+                            ->content(fn (EscrowDispute $record) => $record->escrowJob->freelancer_payout_invoice ?: '— no hay ninguna guardada, la disputa se abrió antes de la entrega —'),
                         Forms\Components\Textarea::make('payout_bolt11')
-                            ->label('Factura del freelancer (bolt11)')
-                            ->helperText('Pedísela justo antes de resolver — las facturas Lightning expiran.')
-                            ->required(),
+                            ->label('Factura alternativa (bolt11)')
+                            ->helperText('Dejalo vacío para usar la factura de arriba. Completalo si no hay una guardada, o si ya expiró.'),
                         Forms\Components\Textarea::make('resolution_notes')->label('Notas de resolución'),
                     ])
                     ->action(fn (EscrowDispute $record, array $data) => self::resolve(
-                        $record, 'release', $data['payout_bolt11'], $data['resolution_notes'] ?? null,
+                        $record, 'release', $data['payout_bolt11'] ?: null, $data['resolution_notes'] ?? null,
                     )),
                 Tables\Actions\Action::make('refund_client')
                     ->label('Reembolsar al cliente')
@@ -79,14 +81,14 @@ class EscrowDisputeResource extends Resource
             ]);
     }
 
-    private static function resolve(EscrowDispute $dispute, string $action, string $payoutBolt11, ?string $notes): void
+    private static function resolve(EscrowDispute $dispute, string $action, ?string $payoutBolt11, ?string $notes): void
     {
         try {
             $escrowService = app(EscrowService::class);
             $job = $dispute->escrowJob;
 
             if ($action === 'release') {
-                $escrowService->release($job, $payoutBolt11);
+                $escrowService->release($job, null, $payoutBolt11);
             } else {
                 $escrowService->refund($job, $payoutBolt11);
             }

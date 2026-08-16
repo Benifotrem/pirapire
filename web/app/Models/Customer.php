@@ -48,9 +48,14 @@ class Customer extends Authenticatable
         return $this->hasMany(EscrowJob::class, 'creator_customer_id');
     }
 
-    public function escrowJobsAsCounterparty(): HasMany
+    public function escrowJobsAsFreelancer(): HasMany
     {
         return $this->hasMany(EscrowJob::class, 'counterparty_customer_id');
+    }
+
+    public function escrowJobApplications(): HasMany
+    {
+        return $this->hasMany(EscrowJobApplication::class, 'freelancer_customer_id');
     }
 
     public function isVip(): bool
