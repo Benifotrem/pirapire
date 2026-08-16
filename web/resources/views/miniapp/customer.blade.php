@@ -213,6 +213,17 @@
             refunded: t('escrow_status_refunded'), cancelled: t('escrow_status_cancelled'),
         };
 
+        // HTML-escapes free text before it goes into an innerHTML template —
+        // job descriptions and application messages are user-supplied (up to
+        // 500/1000 chars, no format restriction), and with strangers using
+        // this instead of just the person testing it, "someone pastes a
+        // <script> into a job description" stops being hypothetical.
+        function esc(value) {
+            const div = document.createElement('div');
+            div.textContent = value ?? '';
+            return div.innerHTML;
+        }
+
         async function api(path, options = {}) {
             const res = await fetch('/api/miniapp/customer' + path, {
                 ...options,
@@ -395,10 +406,10 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="font-mono text-sm font-semibold">#ESC-${job.id.slice(0, 8).toUpperCase()}</p>
-                        <p class="pp-hint text-xs">${job.description}</p>
+                        <p class="pp-hint text-xs">${esc(job.description)}</p>
                         <p class="mt-0.5 font-mono text-xs pp-hint">${Number(job.amount_sats).toLocaleString()} sats</p>
                     </div>
-                    ${showStatus ? `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${statusStyles[job.status] ?? job.status}</span>` : ''}
+                    ${showStatus ? `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${esc(statusStyles[job.status] ?? job.status)}</span>` : ''}
                 </div>`;
             return row;
         }
@@ -435,7 +446,7 @@
             show('escrow-postular');
             document.getElementById('escrow-apply-job').innerHTML = `
                 <p class="font-mono text-sm font-semibold">#ESC-${job.id.slice(0, 8).toUpperCase()}</p>
-                <p class="pp-hint mt-1 text-xs">${job.description}</p>
+                <p class="pp-hint mt-1 text-xs">${esc(job.description)}</p>
                 <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats</p>`;
             document.getElementById('escrow-apply-form').reset();
             document.getElementById('escrow-apply-form-error').classList.add('hidden');
@@ -494,8 +505,8 @@
             }
             container.innerHTML = `<p class="text-sm font-semibold">${t('escrow_applications_title')}</p>` + applications.map(application => `
                 <div class="pp-card mt-2 rounded-xl p-4">
-                    <p class="text-sm font-semibold">${application.freelancer?.display_name || ('#' + application.freelancer_customer_id)}</p>
-                    <p class="pp-hint mt-1 text-xs">${application.message}</p>
+                    <p class="text-sm font-semibold">${application.freelancer?.display_name ? esc(application.freelancer.display_name) : ('#' + application.freelancer_customer_id)}</p>
+                    <p class="pp-hint mt-1 text-xs">${esc(application.message)}</p>
                     <button data-accept="${application.id}" class="mt-2 w-full rounded-lg py-1.5 text-xs font-semibold text-white" style="background: var(--pp-button); color: var(--pp-button-text)">${t('escrow_accept')}</button>
                 </div>`).join('');
             container.querySelectorAll('[data-accept]').forEach(btn => btn.addEventListener('click', async () => {
@@ -552,8 +563,8 @@
 
             el.innerHTML = `
                 <h1 class="font-mono text-lg font-bold">#ESC-${job.id.slice(0, 8).toUpperCase()}</h1>
-                <span class="mt-1 inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${statusStyles[job.status] ?? job.status}</span>
-                <p class="pp-hint mt-3 text-sm">${job.description}</p>
+                <span class="mt-1 inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">${esc(statusStyles[job.status] ?? job.status)}</span>
+                <p class="pp-hint mt-3 text-sm">${esc(job.description)}</p>
                 <p class="mt-1 font-mono text-sm">${Number(job.amount_sats).toLocaleString()} sats <span class="pp-hint">+ ${Number(job.fee_sats).toLocaleString()} comisión</span></p>
                 ${actionsHtml}
                 <p id="escrow-detail-error" class="mt-3 hidden text-sm text-rose-600"></p>`;
@@ -632,7 +643,7 @@
                             </div>`).join('')}
                     </div>`;
             } catch (e) {
-                el.innerHTML = `<p class="text-sm text-rose-600">${e.message}</p>`;
+                el.innerHTML = `<p class="text-sm text-rose-600">${esc(e.message)}</p>`;
             }
         }
 
