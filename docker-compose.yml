@@ -118,6 +118,15 @@ services:
     restart: unless-stopped
     environment:
       LNBITS_BACKEND_WALLET_CLASS: ${LNBITS_BACKEND_WALLET_CLASS:-FakeWallet}
+      # Only read when LNBITS_BACKEND_WALLET_CLASS=BlinkWallet — points
+      # LNbits at Blink's hosted API/websocket instead of a self-hosted
+      # node, so no channels or liquidity to manage on this VPS. See
+      # README "Desarrollo local" (FakeWallet vs. backend real) and
+      # https://dev.blink.sv/examples/lnbits-funding-source for how to
+      # get BLINK_TOKEN from https://dashboard.blink.sv.
+      BLINK_API_ENDPOINT: ${BLINK_API_ENDPOINT:-https://api.blink.sv/graphql}
+      BLINK_WS_ENDPOINT: ${BLINK_WS_ENDPOINT:-wss://ws.blink.sv/graphql}
+      BLINK_TOKEN: ${BLINK_TOKEN:-}
       # No LNBITS_DATABASE_URL: that's specifically for a Postgres
       # connection string (e.g. postgres://...) — setting it at all,
       # even to a sqlite-looking value, pushes LNbits' migration code

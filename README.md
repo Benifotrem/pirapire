@@ -319,7 +319,10 @@ Son **dos** archivos `.env` distintos, cada uno con un rol distinto:
 
 `DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` tienen que ser **iguales** en `.env` (raíz) y en `web/.env`: el primero crea las credenciales del contenedor de Postgres, el segundo es lo que usa Laravel para conectarse a esa misma base.
 
-`FakeWallet` no mueve sats reales — es el funding source por defecto, pensado para probar el flujo completo (crear escrow, pagar, liberar) sin arriesgar plata. Las claves de API se consiguen igual que con un backend real: entrá a `http://<tu-VPS>:5000`, dejá que LNbits te cree wallet en el primer acceso, y copiá el **Admin key** y el **Invoice/read key** desde "API docs" en la página del wallet. Antes de producción, cambiá `LNBITS_BACKEND_WALLET_CLASS` a un backend real (`LndRestWallet`, `CoreLightningWallet`, etc.) apuntando a tu propio nodo Lightning — ahí sí las claves y los sats son reales. No hace falta ninguna extensión: el escrow usa la API core de pagos de LNbits (ver sección 3).
+`FakeWallet` no mueve sats reales — es el funding source por defecto, pensado para probar el flujo completo (crear escrow, pagar, liberar) sin arriesgar plata. Las claves de API se consiguen igual que con un backend real: entrá a `http://<tu-VPS>:5000`, dejá que LNbits te cree wallet en el primer acceso, y copiá el **Admin key** y el **Invoice/read key** desde "API docs" en la página del wallet. Antes de producción, cambiá `LNBITS_BACKEND_WALLET_CLASS` a un backend real. No hace falta ninguna extensión: el escrow usa la API core de pagos de LNbits (ver sección 3). Dos caminos:
+
+- **Nodo Lightning propio** (`LndRestWallet`, `CoreLightningWallet`, etc.) apuntando a tu nodo — soberanía real sobre los fondos, pero implica correr y sincronizar un nodo (aunque sea liviano, en modo Neutrino) y proveer vos mismo la liquidez entrante/saliente de los canales.
+- **`BlinkWallet`** (ver el comentario del servicio `lnbits` en `docker-compose.yml` y `.env.example`) — LNbits habla con la API de [Blink](https://www.blink.sv) en vez de con un nodo propio; sin canales ni liquidez que gestionar, a costa de que Blink custodia los sats reales detrás de tu wallet de LNbits (custodia sobre custodia). Útil como paso intermedio antes de migrar a nodo propio cuando el volumen lo justifique.
 
 ### Datos de prueba
 
