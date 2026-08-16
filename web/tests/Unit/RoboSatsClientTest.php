@@ -37,11 +37,47 @@ class RoboSatsClientTest extends TestCase
 
     public function test_fetch_book_still_works_normally_with_a_proxy_configured(): void
     {
-        Http::fake(['robosats.test/book/*' => Http::response([['id' => 1]], 200)]);
+        Http::fake(['robosats.test/api/book/*' => Http::response([['id' => 1]], 200)]);
 
         $client = new RoboSatsClient('http://robosats.test', 'socks5h://tor:9050');
 
         $this->assertSame([['id' => 1]], $client->fetchBook('PYG'));
+    }
+
+    /** RoboSats' `currency` param is its own internal currency-table index, not ISO 4217 — see RoboSatsClient::CURRENCY_INDEX. */
+    public function test_fetch_book_uses_robosats_internal_currency_index_not_iso_4217(): void
+    {
+        Http::fake(['robosats.test/api/book/*' => Http::response([], 200)]);
+
+        $client = new RoboSatsClient('http://robosats.test');
+        $client->fetchBook('PYG');
+        Http::assertSent(fn ($request) => str_contains((string) $request->url(), 'currency=35'));
+
+        $client->fetchBook('USD');
+        Http::assertSent(fn ($request) => str_contains((string) $request->url(), 'currency=1'));
+    }
+
+    public function test_fetch_book_requests_both_buy_and_sell_orders(): void
+    {
+        Http::fake(['robosats.test/api/book/*' => Http::response([], 200)]);
+
+        $client = new RoboSatsClient('http://robosats.test');
+        $client->fetchBook('PYG');
+
+        Http::assertSent(fn ($request) => str_contains((string) $request->url(), 'type=2'));
+    }
+
+    /** A coordinator with no open orders for this currency answers 404 with a JSON body — an empty book, not a failure worth logging. */
+    public function test_fetch_book_treats_a_404_empty_book_response_as_no_offers_without_logging(): void
+    {
+        Log::spy();
+        Http::fake(['robosats.test/api/book/*' => Http::response(['not_found' => 'No orders found, be the first to make one'], 404)]);
+
+        $client = new RoboSatsClient('http://robosats.test');
+
+        $this->assertSame([], $client->fetchBook('PYG'));
+        Log::shouldNotHaveReceived('warning');
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_a_proxy_or_tor_connectivity_failure_returns_an_empty_book_instead_of_throwing(): void

@@ -22,7 +22,7 @@ class PollP2POffersTest extends TestCase
     {
         config(['services.robosats.api_base_url' => 'http://robosats.test']);
         Http::fake([
-            'robosats.test/book/*' => Http::response($orders, 200),
+            'robosats.test/api/book/*' => Http::response($orders, 200),
         ]);
     }
 

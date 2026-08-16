@@ -12,7 +12,21 @@ use Throwable;
  */
 class RoboSatsClient
 {
-    private const CURRENCY_CODES = ['PYG' => 600, 'USD' => 840];
+    /**
+     * NOT ISO 4217 — RoboSats' `currency` query param is an index into its
+     * own internal currency table (served as static JSON by the frontend at
+     * /static/assets/currencies.json on any RoboSats host, coordinator or
+     * not). Verified 2026-08-16 against a live coordinator's real order
+     * book (Temple of Sats) — a PIX-denominated order (PIX is
+     * Brazil-specific) came back tagged currency:20, which is BRL's index
+     * in that table, not BRL's ISO 4217 numeric code (986). The ISO codes
+     * this constant used before (PYG=600, USD=840) silently matched
+     * nothing on a real coordinator — RoboSatsDriver got 200 OK with a
+     * real order book back, just never anything for those two "currency"
+     * values, so no alert this could produce was ever wrong, only ever
+     * empty.
+     */
+    private const CURRENCY_INDEX = ['PYG' => 35, 'USD' => 1];
 
     private readonly ?string $baseUrl;
 
@@ -36,15 +50,29 @@ class RoboSatsClient
             return [];
         }
 
-        $isoCode = self::CURRENCY_CODES[$currency] ?? null;
-        if (! $isoCode) {
+        $currencyIndex = self::CURRENCY_INDEX[$currency] ?? null;
+        if (! $currencyIndex) {
             return [];
         }
 
         try {
+            // type=2 asks for both BUY and SELL — App\Services\P2P\AlertMatcher
+            // does the order_type filtering per-customer afterward, same as
+            // it already does for amount/payment method, so there's no
+            // reason to narrow this server-side.
             $response = Http::timeout(10)
                 ->when($this->proxyUrl, fn ($http) => $http->withOptions(['proxy' => $this->proxyUrl]))
-                ->get(rtrim($this->baseUrl, '/')."/book/?currency={$isoCode}");
+                ->get(rtrim($this->baseUrl, '/')."/api/book/?currency={$currencyIndex}&type=2");
+
+            // A coordinator with zero open orders for this currency answers
+            // 404 with a body like {"not_found": "No orders found, be the
+            // first to make one"} — a normal empty book, not a broken
+            // request. Worth a warning for any other failure status, but
+            // not this one, or every low-volume currency/coordinator combo
+            // would spam the log every poll.
+            if ($response->status() === 404) {
+                return [];
+            }
 
             if ($response->failed()) {
                 Log::warning('RoboSats book request returned non-200', ['status' => $response->status()]);
