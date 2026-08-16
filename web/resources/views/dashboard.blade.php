@@ -60,17 +60,27 @@
                     </select>
                 </div>
                 <div>
-                    <label for="min_amount" class="block text-xs font-medium text-slate-500">{{ __('site.dashboard.min_amount') }}</label>
+                    <label for="min_amount" class="block text-xs font-medium text-slate-500">
+                        {{ __('site.dashboard.min_amount') }} <span class="js-currency-unit font-semibold text-slate-600">(PYG)</span>
+                    </label>
                     <input type="number" name="min_amount" id="min_amount" min="0" class="mt-1 w-full rounded-lg border-slate-300 font-mono text-sm focus:border-blue-500 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label for="max_amount" class="block text-xs font-medium text-slate-500">{{ __('site.dashboard.max_amount') }}</label>
+                    <label for="max_amount" class="block text-xs font-medium text-slate-500">
+                        {{ __('site.dashboard.max_amount') }} <span class="js-currency-unit font-semibold text-slate-600">(PYG)</span>
+                    </label>
                     <input type="number" name="max_amount" id="max_amount" min="0" class="mt-1 w-full rounded-lg border-slate-300 font-mono text-sm focus:border-blue-500 focus:ring-blue-500">
                 </div>
+                <p class="sm:col-span-2 text-xs text-slate-400">{{ __('site.dashboard.amount_hint') }}</p>
                 <button type="submit" class="sm:col-span-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90">
                     {{ __('site.dashboard.create_alert') }}
                 </button>
             </form>
+            <script>
+                document.getElementById('currency').addEventListener('change', function () {
+                    document.querySelectorAll('.js-currency-unit').forEach((el) => { el.textContent = '(' + this.value + ')'; });
+                });
+            </script>
         </div>
 
         {{-- Alerts list ------------------------------------------------ --}}

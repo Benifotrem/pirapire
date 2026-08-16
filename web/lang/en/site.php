@@ -51,6 +51,7 @@ return [
         'order_type_sell' => 'Sell',
         'min_amount' => 'Minimum amount (optional)',
         'max_amount' => 'Maximum amount (optional)',
+        'amount_hint' => "In the currency picked above — it's the P2P order's amount, not satoshis.",
         'create_alert' => 'Create alert',
         'my_alerts_title' => 'My alerts',
         'alert_active' => '● Active',

@@ -86,7 +86,7 @@
             <form id="alert-form" class="mt-4 space-y-4">
                 <div>
                     <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_currency') }}</label>
-                    <select name="currency" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
+                    <select name="currency" id="alert-currency" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
                         <option value="PYG">PYG</option>
                         <option value="USD">USD</option>
                     </select>
@@ -109,14 +109,15 @@
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_min_amount') }}</label>
+                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_min_amount') }} <span class="js-currency-unit font-semibold">(PYG)</span></label>
                         <input type="number" name="min_amount" min="0" class="pp-card mt-1 w-full rounded-lg border-slate-300 font-mono text-sm">
                     </div>
                     <div>
-                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_max_amount') }}</label>
+                        <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_max_amount') }} <span class="js-currency-unit font-semibold">(PYG)</span></label>
                         <input type="number" name="max_amount" min="0" class="pp-card mt-1 w-full rounded-lg border-slate-300 font-mono text-sm">
                     </div>
                 </div>
+                <p class="pp-hint text-xs">{{ __('miniapp.alerts_amount_hint') }}</p>
                 <div>
                     <label class="pp-hint block text-xs font-medium">{{ __('miniapp.alerts_payment_methods') }}</label>
                     <input type="text" name="payment_methods" placeholder="{{ __('miniapp.alerts_payment_methods_placeholder') }}" class="pp-card mt-1 w-full rounded-lg border-slate-300 text-sm">
@@ -317,6 +318,15 @@
         }
 
         function setupAlertForm() {
+            const currencySelect = document.getElementById('alert-currency');
+            // .onchange (not addEventListener) since this setup function
+            // reruns every time the panel is shown — an assignment replaces
+            // the previous handler instead of stacking a new one each visit.
+            currencySelect.onchange = () => {
+                document.querySelectorAll('.js-currency-unit').forEach((el) => { el.textContent = '(' + currencySelect.value + ')'; });
+            };
+            currencySelect.onchange();
+
             tg.MainButton.setText(t('alerts_create')).show();
             mainButtonAction = async () => {
                 const form = document.getElementById('alert-form');

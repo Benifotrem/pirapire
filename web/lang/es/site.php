@@ -51,6 +51,7 @@ return [
         'order_type_sell' => 'Venta',
         'min_amount' => 'Monto mínimo (opcional)',
         'max_amount' => 'Monto máximo (opcional)',
+        'amount_hint' => 'En la moneda elegida arriba — es el monto de la orden P2P, no satoshis.',
         'create_alert' => 'Crear alerta',
         'my_alerts_title' => 'Mis alertas',
         'alert_active' => '● Activa',

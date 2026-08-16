@@ -41,6 +41,7 @@ return [
     'alerts_sell' => 'Venta',
     'alerts_min_amount' => 'Monto mínimo',
     'alerts_max_amount' => 'Monto máximo',
+    'alerts_amount_hint' => 'En la moneda elegida arriba — es el monto de la orden P2P, no satoshis.',
     'alerts_payment_methods' => 'Métodos de pago (separados por coma)',
     'alerts_payment_methods_placeholder' => 'PIX, transferencia bancaria',
     'alerts_create' => 'Crear alerta',

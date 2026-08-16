@@ -41,6 +41,7 @@ return [
     'alerts_sell' => 'Sell',
     'alerts_min_amount' => 'Minimum amount',
     'alerts_max_amount' => 'Maximum amount',
+    'alerts_amount_hint' => "In the currency picked above — it's the P2P order's amount, not satoshis.",
     'alerts_payment_methods' => 'Payment methods (comma-separated)',
     'alerts_payment_methods_placeholder' => 'PIX, bank transfer',
     'alerts_create' => 'Create alert',
