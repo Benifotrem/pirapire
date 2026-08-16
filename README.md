@@ -123,10 +123,6 @@ created → cancelled (expira sin fondear)
 
 **Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `created → funded → in_progress → completed` y `created → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`.
 
-### Fase beta: comisión reducida al 1%
-
-Durante el primer mes de uso con la comunidad, `ESCROW_FEE_PERCENT` corre en **1%** en vez del 1.5% por defecto — para bajar la fricción de probar la plataforma mientras se recibe feedback, sin llegar a comisión 0%. La razón de no ir a 0% durante la beta: el monto del trabajo en sí (`amount_sats`) siempre lo pone el cliente que crea el escrow, nunca la plataforma — pero si la comisión fuera 0%, cualquier fee de ruteo Lightning que cobre el backend al hacer el pago saliente de `release()`/`refund()` saldría del propio wallet de la plataforma, sin nada retenido para cubrirlo. Con 1% de margen (que se queda en el wallet cuando se libera un trabajo, ver arriba), ese fee de ruteo típico queda cubierto solo, sin exposición extra para la plataforma. Terminada la beta, subir `ESCROW_FEE_PERCENT` de vuelta a `1.5` en `web/.env` y recrear el contenedor `web` (`docker compose up -d --force-recreate web`).
-
 ## 4. Comandos de Telegram (bot de clientes)
 
 | Comando | Descripción |
@@ -347,7 +343,7 @@ Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para
 
 - `LNBITS_ADMIN_KEY`, `LNBITS_INVOICE_READ_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia el escrow.
 - `LNBITS_BACKEND_WALLET_CLASS` (`.env` raíz) + `BLINK_TOKEN`: backend real de LNbits en producción — ver "Desarrollo local" (FakeWallet vs. Blink) más abajo.
-- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow — **1.5% por defecto, 1% durante la fase beta** (ver sección 3, "Fase beta: comisión reducida al 1%").
+- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET`: bot privado de administración — login admin por código y el handshake `/vincular` (sección 5).
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
