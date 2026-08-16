@@ -9,6 +9,7 @@ use App\Services\Bot\CustomerCommandRouter;
 use App\Services\Lightning\LnbitsClient;
 use App\Services\Telegram\CustomerTelegramBotClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
@@ -456,5 +457,106 @@ class TelegramCustomerWebhookTest extends TestCase
         // it's swallowed by the same catch as a failed sendMessage() call.
         $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/mempool'])
             ->assertOk();
+    }
+
+    public function test_vincular_links_a_wallet_authenticated_customer_to_the_chat(): void
+    {
+        $customer = Customer::factory()->create(['telegram_chat_id' => null]);
+        Cache::put('customer-telegram-link:ABC123', [
+            'customer_id' => $customer->id,
+            'status' => 'pending',
+        ], 600);
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'vinculada')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vincular abc123'])
+            ->assertOk()
+            ->assertJsonPath('status', 'linked');
+
+        $this->assertSame('555111', $customer->fresh()->telegram_chat_id);
+        $this->assertSame('confirmed', Cache::get('customer-telegram-link:ABC123')['status']);
+    }
+
+    public function test_vincular_with_an_unknown_or_expired_code_replies_with_an_error(): void
+    {
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'no existe')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vincular NOPE99'])
+            ->assertOk()
+            ->assertJsonPath('status', 'unknown_code');
+    }
+
+    public function test_vincular_is_idempotent_when_the_chat_is_already_linked(): void
+    {
+        $customer = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        Cache::put('customer-telegram-link:ABC123', [
+            'customer_id' => $customer->id,
+            'status' => 'pending',
+        ], 600);
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'ya estaba vinculada')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vincular abc123'])
+            ->assertOk()
+            ->assertJsonPath('status', 'already_linked');
+    }
+
+    public function test_vincular_folds_in_an_empty_orphan_row_created_by_a_bare_start(): void
+    {
+        $orphan = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        $target = Customer::factory()->create(['telegram_chat_id' => null]);
+        Cache::put('customer-telegram-link:ABC123', [
+            'customer_id' => $target->id,
+            'status' => 'pending',
+        ], 600);
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'vinculada')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vincular abc123'])
+            ->assertOk()
+            ->assertJsonPath('status', 'linked');
+
+        $this->assertSame('555111', $target->fresh()->telegram_chat_id);
+        $this->assertDatabaseMissing('customers', ['id' => $orphan->id]);
+    }
+
+    public function test_vincular_refuses_to_overwrite_a_chat_with_active_alerts_on_another_account(): void
+    {
+        $existing = Customer::factory()->create(['telegram_chat_id' => '555111']);
+        $existing->alerts()->create([
+            'currency' => 'PYG',
+            'source' => 'all',
+            'order_type' => 'ANY',
+            'is_active' => true,
+        ]);
+        $target = Customer::factory()->create(['telegram_chat_id' => null]);
+        Cache::put('customer-telegram-link:ABC123', [
+            'customer_id' => $target->id,
+            'status' => 'pending',
+        ], 600);
+
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'ya tiene actividad')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vincular abc123'])
+            ->assertOk()
+            ->assertJsonPath('status', 'conflict');
+
+        $this->assertNull($target->fresh()->telegram_chat_id);
+        $this->assertDatabaseHas('customers', ['id' => $existing->id, 'telegram_chat_id' => '555111']);
     }
 }

@@ -17,7 +17,10 @@
                 @if ($customer->telegram_chat_id)
                     <p class="text-slate-500">{{ __('site.dashboard.telegram_linked') }}</p>
                 @else
-                    <p class="text-rose-600">{!! __('site.dashboard.telegram_not_linked', ['command' => '<code class="font-mono">/start</code>']) !!}</p>
+                    <p class="text-rose-600">
+                        {{ __('site.dashboard.telegram_not_linked') }}
+                        <a href="{{ route('customer-link-telegram') }}" class="font-semibold underline decoration-rose-300 underline-offset-2 hover:text-rose-700">{{ __('site.dashboard.telegram_link_cta') }}</a>
+                    </p>
                 @endif
             </div>
         </div>

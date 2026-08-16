@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LnurlAuthController;
 use App\Http\Controllers\Auth\StaffLnurlAuthController;
 use App\Http\Controllers\Auth\StaffTelegramAuthController;
 use App\Http\Controllers\Auth\TelegramLinkController;
+use App\Http\Controllers\CustomerTelegramLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LedAdSubmissionController;
 use App\Http\Controllers\LocaleController;
@@ -53,6 +54,12 @@ Route::middleware('auth:customer')->group(function () {
     Route::post('/dashboard/alerts', [DashboardController::class, 'storeAlert'])->name('alerts.store');
     Route::patch('/dashboard/alerts/{alert}/toggle', [DashboardController::class, 'toggleAlert'])->name('alerts.toggle');
     Route::delete('/dashboard/alerts/{alert}', [DashboardController::class, 'destroyAlert'])->name('alerts.destroy');
+
+    // Links this Customer row (identified by linking_key from LNURL-auth) to
+    // a Telegram chat — see App\Http\Controllers\CustomerTelegramLinkController
+    // and TelegramCustomerWebhookController's "/vincular CODE" handling.
+    Route::get('/dashboard/link-telegram', [CustomerTelegramLinkController::class, 'show'])->name('customer-link-telegram');
+    Route::get('/dashboard/link-telegram/status/{code}', [CustomerTelegramLinkController::class, 'status'])->name('customer-telegram-link.status');
 });
 
 // Lightning-wallet login for the Filament admin panel (App\Models\User).
