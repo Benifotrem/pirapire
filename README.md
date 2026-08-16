@@ -123,6 +123,10 @@ created → cancelled (expira sin fondear)
 
 **Cobertura de tests:** `tests/Unit/EscrowServiceTest.php` prueba cada método del servicio contra un `LnbitsClient` mockeado (Mockery). `tests/Feature/EscrowFullLifecycleTest.php` corre el ciclo completo de punta a punta — `created → funded → in_progress → completed` y `created → funded → disputed → refunded` — contra un doble de la API de pagos de LNbits armado con `Http::fake()` (el equivalente portable de `FakeWallet` para un test PHPUnit que corre en CI sin un contenedor de LNbits real), pasando `markFunded` por la ruta real del webhook (`POST /api/escrow/webhook`, no una llamada directa al servicio) para que la prueba cubra también `EscrowWebhookController`.
 
+### Fase beta: comisión reducida al 1%
+
+Durante el primer mes de uso con la comunidad, `ESCROW_FEE_PERCENT` corre en **1%** en vez del 1.5% por defecto — para bajar la fricción de probar la plataforma mientras se recibe feedback, sin llegar a comisión 0%. La razón de no ir a 0% durante la beta: el monto del trabajo en sí (`amount_sats`) siempre lo pone el cliente que crea el escrow, nunca la plataforma — pero si la comisión fuera 0%, cualquier fee de ruteo Lightning que cobre el backend al hacer el pago saliente de `release()`/`refund()` saldría del propio wallet de la plataforma, sin nada retenido para cubrirlo. Con 1% de margen (que se queda en el wallet cuando se libera un trabajo, ver arriba), ese fee de ruteo típico queda cubierto solo, sin exposición extra para la plataforma. Terminada la beta, subir `ESCROW_FEE_PERCENT` de vuelta a `1.5` en `web/.env` y recrear el contenedor `web` (`docker compose up -d --force-recreate web`).
+
 ## 4. Comandos de Telegram (bot de clientes)
 
 | Comando | Descripción |
@@ -342,7 +346,8 @@ cd web && php artisan test          # requiere ext-gmp o ext-bcmath (verificaci�
 Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para las que lee `docker compose` directamente — incluidas `CLOUDFLARE_TUNNEL_TOKEN` y `COMPOSE_PROFILES=production`, ver "Cloudflare Tunnel" más abajo. Destacadas:
 
 - `LNBITS_ADMIN_KEY`, `LNBITS_INVOICE_READ_KEY`, `LNBITS_WEBHOOK_SECRET`: credenciales de la instancia LNbits que custodia el escrow.
-- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow (1.5% por defecto).
+- `LNBITS_BACKEND_WALLET_CLASS` (`.env` raíz) + `BLINK_TOKEN`: backend real de LNbits en producción — ver "Desarrollo local" (FakeWallet vs. Blink) más abajo.
+- `ESCROW_FEE_PERCENT`: comisión de la plataforma sobre los trabajos de escrow — **1.5% por defecto, 1% durante la fase beta** (ver sección 3, "Fase beta: comisión reducida al 1%").
 - `TELEGRAM_ADMIN_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET`: bot privado de administración — login admin por código y el handshake `/vincular` (sección 5).
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_WEBHOOK_SECRET`: bot público de clientes — `/mempool`, `/vip`, `/escrow`, alertas de RoboSats (sección 4). Bot **distinto** del anterior.
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
@@ -375,10 +380,24 @@ COMPOSE_PROFILES=production   # activa el servicio cloudflared en todo comando d
 
 **3. Desplegar** — `docker compose up -d` (manual o vía `deploy.yml`) ya levanta `cloudflared` gracias a `COMPOSE_PROFILES`, y ni nginx ni LNbits publican puertos. Podés (y deberías) cerrar `80`, `443` y `5000` en el firewall del VPS/proveedor — ya no hace falta que estén abiertos para nada.
 
-**Acceder a la UI de LNbits** (para copiar el Admin/Invoice-read key la primera vez) ya no es tan directo como antes, a propósito. Dos opciones, documentadas también en el comentario del servicio `lnbits` en `docker-compose.yml`:
+**Acceder a la UI de LNbits** (para copiar el Admin/Invoice-read key, o para gestionar el wallet) ya no es tan directo como antes, a propósito. Dos opciones, documentadas también en el comentario del servicio `lnbits` en `docker-compose.yml`:
 
-- Agregar un segundo "Public Hostname" al mismo túnel (por ejemplo `lnbits.pirapire.pro` → `lnbits:5000`) y protegerlo con **Cloudflare Access** (`Access` → `Applications` → restringir por tu email) — así solo vos podés entrar, autenticado con Cloudflare, sin exponer nada al público.
+- Agregar un segundo "Public Hostname" al mismo túnel (por ejemplo `lnbits.pirapire.pro` → `lnbits:5000`) y protegerlo con **Cloudflare Access** — así solo vos podés entrar, autenticado con Cloudflare, sin exponer nada al público. Ver "Cloudflare Access con MFA para la UI de LNbits" abajo para el detalle exacto de cómo quedó armado en producción.
 - O, para un chequeo puntual, agregar temporalmente `- "127.0.0.1:5000:5000"` a las `ports:` del servicio `lnbits`, `docker compose up -d lnbits`, hacer lo que necesites por un túnel SSH, y sacar la línea de nuevo.
+
+### Cloudflare Access con MFA para la UI de LNbits
+
+Como `lnbits.pirapire.pro` da acceso directo al wallet custodial que respalda el escrow, además de restringir por email se le exige un segundo factor. Piezas necesarias, todas en el [dashboard de Cloudflare Zero Trust](https://one.dash.cloudflare.com/), sección **Access controls**:
+
+1. **App Launcher habilitado** (`Access settings` → `Manage your App Launcher` → `Manage`, o el atajo "Manage App Launcher access" en el overview de Access controls): necesita su propia policy con un `Include: Emails` para tu dirección — sin esto, `<tu-team>.cloudflareaccess.com` (el team domain, configurable en `Settings` → `Custom Pages`/`General`) rechaza el login con "contact your administrator" antes incluso de llegar a la app protegida.
+2. **Enrolar el Authenticator**: una vez dentro del App Launcher, ícono de perfil → **Account** → **MFA Devices** → **Add an MFA device** → escanear el QR con Google Authenticator/Authy.
+3. **MFA habilitado a nivel global** (`Access settings` → `MFA methods` → `Authenticator application: On`) — esto solo habilita el método, no lo exige todavía.
+4. **Exigir el MFA a nivel de la aplicación** `lnbits`/Inbits (no a nivel de policy): `Applications` → tu app de LNbits → pestaña **Authentication** → sub-pestaña **MFA** → **Customize MFA settings** → elegir *Authenticator application*. Esta es la pieza que realmente dispara el desafío del código de 6 dígitos.
+
+**Un par de errores en los que es fácil caer armando esto** (los pisamos en producción antes de encontrar la config correcta):
+
+- Agregar una regla **Require: Authentication Method = MFA** en la policy de Access **no** exige el Authenticator que enrolaste — esa regla solo chequea si tu *identity provider* reportó MFA en el login (AMR claim de RFC 8176). Con login "Cloudflare" simple (email/contraseña de tu cuenta, sin 2FA propio ahí), esa condición nunca se cumple y la policy bloquea en seco, sin mostrar ningún desafío. El mecanismo correcto es el del paso 4 arriba (a nivel Application, no a nivel Policy).
+- Si la aplicación tiene **"Respect global enforcement setting"** seleccionado en su pestaña MFA, y el enforcement global está en Off (que es lo normal si no querés MFA en *todas* las apps de Access), esa app no exige nada aunque tengas Authenticator enrolado — hay que pasarla explícitamente a **"Customize MFA settings"**.
 
 **Desarrollo local no usa nada de esto** — no hace falta token ni túnel. `docker-compose.local.yml` publica nginx y LNbits directo en `localhost` (ver "Desarrollo local" más arriba), y el servicio `cloudflared` ni se levanta (queda detrás del profile `production`, que un `docker compose up` normal no activa).
 
