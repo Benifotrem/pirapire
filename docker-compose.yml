@@ -114,7 +114,14 @@ services:
   # a real backend (LndRestWallet, CoreLightningWallet, etc.) pointing at
   # your own Lightning node.
   lnbits:
-    image: lnbitsdocker/lnbits-legend:latest
+    # lnbitsdocker/lnbits-legend (used here previously) is an abandoned
+    # community fork frozen at v0.11.3 — BlinkWallet support (and years of
+    # other fixes) only exists from v0.12.9 onward in the officially
+    # maintained image below. Confirmed the hard way: with the old image,
+    # LNBITS_BACKEND_WALLET_CLASS=BlinkWallet fails with "module
+    # 'lnbits.wallets' has no attribute 'BlinkWallet'" and silently falls
+    # back to VoidWallet (moves nothing, not even fake sats).
+    image: lnbits/lnbits:latest
     restart: unless-stopped
     environment:
       LNBITS_BACKEND_WALLET_CLASS: ${LNBITS_BACKEND_WALLET_CLASS:-FakeWallet}
