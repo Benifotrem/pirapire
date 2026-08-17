@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+    $freeTierDelayMinutes = (int) config('services.alerts.free_tier_delay_minutes');
+@endphp
+
 @section('content')
 
     {{-- Hero --------------------------------------------------------- --}}
@@ -51,7 +55,7 @@
                     image="/images/p2p-alerts.webp"
                     gradient="from-blue-500 to-indigo-600"
                     :title="__('site.welcome.feature_alerts_title')"
-                    :description="__('site.welcome.feature_alerts_description')"
+                    :description="$freeTierDelayMinutes > 0 ? __('site.welcome.feature_alerts_description_tiered', ['minutes' => $freeTierDelayMinutes]) : __('site.welcome.feature_alerts_description')"
                 >
                     <path d="M12 2 2 7l10 5 10-5-10-5Z" />
                     <path d="M2 17l10 5 10-5" />

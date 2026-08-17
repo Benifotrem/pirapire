@@ -196,6 +196,7 @@
 
         const T = @json(__('miniapp'));
         const t = (key) => T[key] ?? key;
+        const FREE_TIER_DELAY_MINUTES = {{ (int) config('services.alerts.free_tier_delay_minutes') }};
 
         document.querySelectorAll('[data-set-locale]').forEach(el => {
             el.addEventListener('click', async (e) => {
@@ -283,7 +284,9 @@
                 detail.textContent = t('vip_detail_vip');
             } else {
                 badge.textContent = t('vip_badge_free');
-                detail.textContent = t('vip_detail_free');
+                detail.textContent = FREE_TIER_DELAY_MINUTES > 0
+                    ? t('vip_detail_free_delayed').replace(':minutes', FREE_TIER_DELAY_MINUTES)
+                    : t('vip_detail_free_instant');
             }
         }
 

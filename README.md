@@ -65,7 +65,7 @@ Las alertas P2P siguen un patrón adaptador: cualquier fuente de ofertas (RoboSa
 `web/app/Console/Commands/PollP2POffers.php` (`p2p:poll`) corre cada minuto (vía el scheduler de Laravel, `routes/console.php`), le pide al agregador el book de PYG y USD, filtra ofertas nuevas contra las alertas activas de cada cliente (`App\Services\P2P\AlertMatcher` — moneda, tipo de orden, rango de monto, métodos de pago, y la fuente elegida) y despacha `App\Jobs\SendP2POfferAlert`:
 
 - **VIP**: se encola sin retraso.
-- **Gratuito**: se encola con un retraso de `FREE_TIER_DELAY_MINUTES` (10 min por defecto) vía `->delay()` — corre en el contenedor `queue` (`php artisan queue:work`), ya levantado por `docker-compose.yml`.
+- **Gratuito**: se encola con un retraso de `FREE_TIER_DELAY_MINUTES` vía `->delay()` — corre en el contenedor `queue` (`php artisan queue:work`), ya levantado por `docker-compose.yml`. `0` por defecto durante la fase actual de validación (ver "Fase actual: alertas gratis instantáneas" más abajo) — con `0`, `->delay(now())` dispara la entrega igual de rápido que a un VIP.
 
 El mensaje de Telegram (`App\Services\P2P\P2PMessageFormatter`) se manda con `parse_mode: Markdown` (`App\Services\Telegram\TelegramBotClient::sendMessage()` acepta un tercer parámetro opcional para esto) e incluye tipo de oferta, la etiqueta de origen (`🤖 [RoboSats]` / `👾 [Mostro]`), monto en fiat, sats estimados, método de pago y vencimiento si aplica; para Mostro, además un link directo (vía [njump.me](https://njump.me), el visor público de eventos Nostr — Mostro no tiene una página web de detalle de orden propia) y un bloque de código monoespaciado copiable con el comando `mostro-cli takebuy -o <ID>` / `takesell` según corresponda.
 
@@ -81,6 +81,16 @@ Los usuarios gestionan sus alertas (moneda, **fuente preferida** — RoboSats, M
 4. La página, que hacía polling a `/dashboard/link-telegram/status/{code}`, detecta la confirmación y redirige al dashboard.
 
 **Sobre `ROBOSATS_API_BASE_URL` y `MOSTRO_RELAYS`:** ninguna de las dos tiene valor por defecto — RoboSats es un exchange federado y Tor-first sin una única API clearnet estable (la documentación oficial desaconseja el acceso clearnet, y gateways Tor2Web como `unsafe.robosats.org` dejaron de funcionar en el pasado), y Mostro no tiene ningún servidor central, solo relays de Nostr. Con las dos sin configurar, `p2p:poll` no hace nada (loggea un aviso) sin afectar `/mempool`/`/vip`/`/escrow`. Cualquiera de las dos alcanza para que el comando tenga algo que sondear — no hace falta configurar ambas.
+
+### Fase actual: alertas gratis instantáneas
+
+`FREE_TIER_DELAY_MINUTES=0` (ver `web/.env.example` y `web/config/services.php`) — mientras dura la fase de validación con la comunidad, las alertas del plan gratuito llegan tan rápido como las de VIP, sin ningún retraso. La idea es demostrar que las notificaciones realmente funcionan antes de empezar a cobrar por la velocidad de entrega.
+
+Es el mismo mecanismo de siempre, solo que con el valor en `0`: `App\Console\Commands\PollP2POffers::dispatchAlert()` sigue llamando `->delay(now()->addMinutes($delayMinutes))` para todo suscriptor no-VIP; con `$delayMinutes = 0` eso equivale a `->delay(now())`, que el worker de la cola procesa de inmediato — no hace falta ninguna rama de código especial para "sin retraso".
+
+Todas las superficies que mencionan esta demora leen el mismo valor de config en el momento de renderizar, así que no hay ningún texto hardcodeado que se pueda desincronizar: el dashboard web (`resources/views/dashboard.blade.php`), la landing (`resources/views/welcome.blade.php`), la Mini App (`resources/views/miniapp/customer.blade.php`) y el comando `/vip` del bot (`App\Services\Bot\CustomerCommandRouter::vip()`) resuelven `config('services.alerts.free_tier_delay_minutes')` en cada request y muestran "al instante" cuando es `0`, o "con N minutos de retraso" cuando es mayor a `0`.
+
+**Para reactivar el retraso** (por ejemplo, al lanzar un plan VIP pago), basta con cambiar `FREE_TIER_DELAY_MINUTES` a un valor comercial (por ejemplo, `10`, el valor histórico de este proyecto) en `web/.env` y recrear los contenedores `web`/`queue`/`scheduler` — no requiere ningún cambio de código, ni de texto: todas las superficies de arriba vuelven a mostrar el retraso real automáticamente. Cobertura: `tests/Feature/DashboardTest.php`, `tests/Feature/TelegramCustomerWebhookTest.php` y `tests/Feature/PollP2POffersTest.php`.
 
 ### Configuración de RoboSats (Tor / proxy)
 
@@ -437,7 +447,7 @@ Ver `web/.env.example` para las de la app Laravel, y `.env.example` (raíz) para
 - `MEMPOOL_API_BASE_URL`: API de mempool.space que consulta `/mempool` (por defecto `https://mempool.space/api`).
 - `ROBOSATS_API_BASE_URL` / `ROBOSATS_PROXY_URL`: coordinador de RoboSats a sondear y, opcionalmente, el proxy SOCKS5/Tor para llegar a un `.onion` (sin valor por defecto — ver sección 2, "Configuración de RoboSats (Tor / proxy)").
 - `MOSTRO_RELAYS` / `MOSTRO_PUBKEY` / `MOSTRO_RELAY_TIMEOUT_SECONDS`: relays de Nostr y clave pública del Mostro a sondear (sin valor por defecto — ver sección 2, "Configuración de Mostro (relays de Nostr)").
-- `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP.
+- `FREE_TIER_DELAY_MINUTES`: retraso de las alertas del plan gratuito frente a VIP — `0` (sin retraso) durante la fase actual de validación con la comunidad (ver sección 2, "Fase actual: alertas gratis instantáneas").
 
 ## CI/CD
 

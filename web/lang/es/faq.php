@@ -48,7 +48,7 @@ return [
             ['title' => 'Creá la alerta', 'body' => 'A partir de ahí, cada vez que aparezca una orden nueva que coincida, te llega un mensaje de Telegram con los detalles y un enlace o comando para tomarla.'],
             ['title' => 'Pausá, activá o borrá cuando quieras', 'body' => 'Desde "Mis alertas" en el mismo panel podés pausar una alerta temporalmente, reactivarla, o eliminarla del todo.'],
         ],
-        'tip' => 'Con el plan gratuito las alertas llegan con 10 minutos de retraso. Con VIP llegan al instante. Para recibir cualquier alerta necesitás tener Telegram vinculado a tu cuenta — ver la guía "Vincular Telegram".',
+        'tip' => 'Mientras estamos en fase de validación con la comunidad, todas las alertas (plan gratuito y VIP) llegan al instante, sin diferencia de velocidad. Para recibir cualquier alerta necesitás tener Telegram vinculado a tu cuenta — ver la guía "Vincular Telegram".',
     ],
 
     'telegram' => [
@@ -138,7 +138,7 @@ return [
         'alerts' => [
             'label' => 'Alertas P2P',
             'items' => [
-                ['q' => '¿Qué diferencia hay entre el plan gratuito y VIP?', 'a' => 'Con el plan gratuito las alertas te llegan con 10 minutos de retraso. Con VIP llegan al instante, apenas aparece la orden.'],
+                ['q' => '¿Qué diferencia hay entre el plan gratuito y VIP?', 'a' => 'Por ahora, mientras dure la fase de validación con la comunidad, ninguna en velocidad: todas las alertas (gratis y VIP) llegan al instante. Cuando el plan VIP pase a ser pago, el plan gratuito va a tener una demora de unos minutos frente al instantáneo de VIP.'],
                 ['q' => 'Puse un monto mínimo/máximo, ¿en qué moneda es?', 'a' => 'Es en la moneda que elegiste para esa alerta (PYG o USD) — es el monto de la orden P2P en fiat, no una cantidad de satoshis.'],
                 ['q' => '¿De dónde salen las ofertas P2P?', 'a' => 'De RoboSats y de Mostro. Podés elegir una fuente específica o "todas" al crear tu alerta.'],
                 ['q' => '¿Cómo consigo el plan VIP?', 'a' => 'Por ahora se asigna manualmente — escribinos por Telegram o contactá a un admin.'],

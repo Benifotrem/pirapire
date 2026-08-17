@@ -78,6 +78,29 @@ class TelegramCustomerWebhookTest extends TestCase
         $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vip'])->assertOk();
     }
 
+    public function test_vip_command_says_instant_when_no_free_tier_delay_is_configured(): void
+    {
+        config(['services.alerts.free_tier_delay_minutes' => 0]);
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, 'te llegan al instante') && ! str_contains($msg, 'minutos de retraso')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vip'])->assertOk();
+    }
+
+    /** Confirms the delay is still readable from config for a future commercial VIP tier — see README "Fase actual: alertas gratis instantáneas". */
+    public function test_vip_command_reports_the_configured_delay_when_one_is_set(): void
+    {
+        config(['services.alerts.free_tier_delay_minutes' => 10]);
+        $this->mock(CustomerTelegramBotClient::class, function ($mock) {
+            $mock->shouldReceive('sendMessage')->once()
+                ->with('555111', \Mockery::on(fn ($msg) => str_contains($msg, '10 minutos de retraso')));
+        });
+
+        $this->postUpdate(['chat' => ['id' => 555111], 'text' => '/vip'])->assertOk();
+    }
+
     public function test_unrecognized_plain_text_gets_no_reply(): void
     {
         $this->mock(CustomerTelegramBotClient::class, fn ($mock) => $mock->shouldNotReceive('sendMessage'));

@@ -48,7 +48,7 @@ return [
             ['title' => 'Create the alert', 'body' => 'From then on, every time a new matching order shows up, you get a Telegram message with the details and a link or command to take it.'],
             ['title' => 'Pause, activate, or delete anytime', 'body' => 'From "My alerts" on the same dashboard you can temporarily pause an alert, reactivate it, or delete it entirely.'],
         ],
-        'tip' => "On the free plan, alerts arrive with a 10-minute delay. With VIP, they arrive instantly. To receive any alert at all, you need Telegram linked to your account — see the 'Link Telegram' guide.",
+        'tip' => "While we're in the community validation phase, every alert (free plan and VIP alike) arrives instantly, with no speed difference. To receive any alert at all, you need Telegram linked to your account — see the 'Link Telegram' guide.",
     ],
 
     'telegram' => [
@@ -138,7 +138,7 @@ return [
         'alerts' => [
             'label' => 'P2P Alerts',
             'items' => [
-                ['q' => "What's the difference between the free plan and VIP?", 'a' => 'On the free plan, alerts arrive with a 10-minute delay. With VIP, they arrive instantly, as soon as the order appears.'],
+                ['q' => "What's the difference between the free plan and VIP?", 'a' => "For now, during the community validation phase, none in speed — every alert (free and VIP) arrives instantly. Once VIP becomes a paid tier, the free plan will get a delay of a few minutes versus VIP's instant delivery."],
                 ['q' => 'I set a minimum/maximum amount — what currency is it in?', 'a' => "It's in whatever currency you picked for that alert (PYG or USD) — it's the P2P order's fiat amount, not a quantity of satoshis."],
                 ['q' => 'Where do the P2P offers come from?', 'a' => 'From RoboSats and Mostro. You can pick a specific source or "all" when creating your alert.'],
                 ['q' => 'How do I get the VIP plan?', 'a' => "It's currently assigned manually — message us on Telegram or contact an admin."],

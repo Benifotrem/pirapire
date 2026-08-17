@@ -69,4 +69,26 @@ class DashboardTest extends TestCase
 
         $this->assertFalse($alert->fresh()->is_active);
     }
+
+    public function test_free_tier_status_reads_instant_when_no_delay_is_configured(): void
+    {
+        config(['services.alerts.free_tier_delay_minutes' => 0]);
+        $customer = Customer::factory()->create();
+
+        $response = $this->actingAs($customer, 'customer')->get('/dashboard');
+
+        $response->assertSee(__('site.dashboard.free_detail_instant'));
+        $response->assertDontSee('minutos de retraso');
+    }
+
+    /** Free-tier copy is meant to flip back on when FREE_TIER_DELAY_MINUTES is reintroduced for a commercial VIP tier — see README "Fase actual: alertas gratis instantáneas". */
+    public function test_free_tier_status_shows_the_configured_delay_when_one_is_set(): void
+    {
+        config(['services.alerts.free_tier_delay_minutes' => 10]);
+        $customer = Customer::factory()->create();
+
+        $response = $this->actingAs($customer, 'customer')->get('/dashboard');
+
+        $response->assertSee(__('site.dashboard.free_detail', ['minutes' => 10]));
+    }
 }

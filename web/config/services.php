@@ -147,7 +147,7 @@ return [
     ],
 
     'alerts' => [
-        'free_tier_delay_minutes' => env('FREE_TIER_DELAY_MINUTES', 10),
+        'free_tier_delay_minutes' => env('FREE_TIER_DELAY_MINUTES', 0),
     ],
 
 ];

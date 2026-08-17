@@ -18,7 +18,8 @@ return [
     'vip_badge_vip' => '⭐ VIP',
     'vip_badge_free' => 'Plan gratuito',
     'vip_detail_vip' => 'Alertas P2P instantáneas, sin retraso.',
-    'vip_detail_free' => 'Alertas P2P con 10 min de retraso frente a VIP.',
+    'vip_detail_free_instant' => 'Alertas P2P instantáneas.',
+    'vip_detail_free_delayed' => 'Alertas P2P con :minutes min de retraso frente a VIP.',
 
     'alerts_title' => 'Alertas P2P',
     'alerts_new' => '+ Nueva',

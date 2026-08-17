@@ -1,5 +1,9 @@
 @extends('layouts.app', ['title' => __('site.dashboard.title').' — Pirapire.pro'])
 
+@php
+    $freeTierDelayMinutes = (int) config('services.alerts.free_tier_delay_minutes');
+@endphp
+
 @section('content')
     <div class="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8">
 
@@ -10,7 +14,13 @@
                     {{ $isVip ? __('site.dashboard.vip_badge') : __('site.dashboard.free_badge') }}
                 </span>
                 <p class="mt-2 text-sm {{ $isVip ? 'text-white/90' : 'text-slate-500' }}">
-                    {{ $isVip ? __('site.dashboard.vip_detail') : __('site.dashboard.free_detail') }}
+                    @if ($isVip)
+                        {{ __('site.dashboard.vip_detail') }}
+                    @elseif ($freeTierDelayMinutes > 0)
+                        {{ __('site.dashboard.free_detail', ['minutes' => $freeTierDelayMinutes]) }}
+                    @else
+                        {{ __('site.dashboard.free_detail_instant') }}
+                    @endif
                 </p>
             </div>
             <div class="px-6 py-4 text-sm">

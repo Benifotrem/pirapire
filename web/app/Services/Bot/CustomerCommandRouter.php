@@ -92,6 +92,8 @@ class CustomerCommandRouter
 
     private function vip(Customer $customer): string
     {
+        $freeTierDelayMinutes = (int) config('services.alerts.free_tier_delay_minutes');
+
         if ($customer->isVip()) {
             $expiry = $customer->vipSubscriptions()
                 ->where('status', 'active')
@@ -104,15 +106,19 @@ class CustomerCommandRouter
             return implode("\n", [
                 '⭐ *Sos VIP en Pirapire*',
                 'Vencimiento: '.($expiry ?? 'sin vencimiento'),
-                'Recibís alertas P2P de RoboSats de forma instantánea, sin el retraso de 10 minutos del plan gratuito.',
+                $freeTierDelayMinutes > 0
+                    ? "Recibís alertas P2P de RoboSats de forma instantánea, sin el retraso de {$freeTierDelayMinutes} minutos del plan gratuito."
+                    : 'Recibís alertas P2P de RoboSats de forma instantánea.',
             ]);
         }
 
         return implode("\n", [
             '🆓 *Estás en el plan gratuito*',
-            'Las alertas P2P de RoboSats te llegan con 10 minutos de retraso.',
+            $freeTierDelayMinutes > 0
+                ? "Las alertas P2P de RoboSats te llegan con {$freeTierDelayMinutes} minutos de retraso."
+                : 'Las alertas P2P de RoboSats te llegan al instante.',
             '',
-            'Actualizá a VIP para recibir alertas instantáneas y otros beneficios:',
+            $freeTierDelayMinutes > 0 ? 'Actualizá a VIP para recibir alertas instantáneas y otros beneficios:' : 'Conocé los demás beneficios de VIP:',
             'https://pirapire.pro/vip',
         ]);
     }

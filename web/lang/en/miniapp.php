@@ -18,7 +18,8 @@ return [
     'vip_badge_vip' => '⭐ VIP',
     'vip_badge_free' => 'Free plan',
     'vip_detail_vip' => 'Instant P2P alerts, no delay.',
-    'vip_detail_free' => 'P2P alerts arrive 10 min after VIP.',
+    'vip_detail_free_instant' => 'Instant P2P alerts.',
+    'vip_detail_free_delayed' => 'P2P alerts arrive :minutes min after VIP.',
 
     'alerts_title' => 'P2P Alerts',
     'alerts_new' => '+ New',
